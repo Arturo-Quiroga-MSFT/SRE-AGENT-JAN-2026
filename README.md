@@ -1,5 +1,7 @@
 # Azure SRE Agent - Partner PoC Quick Start
 
+> **Attribution:** This PoC is based on the original [grocery-sre-demo](https://github.com/dm-chelupati/grocery-sre-demo) and accompanying blog post by **Deepthi Chelupati** (Microsoft). The demo showcases how Azure SRE Agent integrates with non-Azure tools (Grafana/Loki + Jira) using MCP (Model Context Protocol). This repository extends that work with comprehensive deployment guides, automation scripts, and Zafin-specific adaptations.
+
 This repository contains everything you need to build an Azure SRE Agent environment that integrates Jira and Grafana/Loki for automated incident response.
 
 ## 📁 What's Included
