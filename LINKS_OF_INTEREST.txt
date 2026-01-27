@@ -1,0 +1,9 @@
+https://github.com/dm-chelupati/grocery-sre-demo
+
+https://learn.microsoft.com/en-us/azure/sre-agent/overview?tabs=task
+
+https://learn.microsoft.com/en-us/azure/sre-agent/usage 
+
+https://techcommunity.microsoft.com/blog/azurepaasblog/introducing-azure-sre-agent/4414569
+
+https://azure.microsoft.com/en-us/pricing/details/sre-agent/

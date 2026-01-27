@@ -1,0 +1,3 @@
+[submodule "grocery-sre-demo"]
+	path = grocery-sre-demo
+	url = https://github.com/dm-chelupati/grocery-sre-demo.git

@@ -1,0 +1,83 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+ENV/
+env/
+venv/
+ENV.bak/
+env.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Secrets and credentials
+*.key
+*.pem
+*.env
+.env.local
+*.secrets
+*-key.json
+service-account-*.json
+
+# Output files from scripts
+mcp-endpoints.txt
+loki-config.txt
+
+# Azure
+.azure/
+*.publishsettings
+
+# Node modules (if any JS tools are used)
+node_modules/
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# Test and coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Personal notes (optional - can be removed if you want to track these)
+NOTES.md
+TODO.md
+*.draft.md
