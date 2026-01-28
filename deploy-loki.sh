@@ -57,8 +57,6 @@ az containerapp create \
   --max-replicas 1 \
   --cpu 0.5 \
   --memory 1Gi \
-  --command "/usr/bin/loki" \
-  --args "-config.file" "/etc/loki/local-config.yaml" \
   --output none
 
 # Get Loki URL
