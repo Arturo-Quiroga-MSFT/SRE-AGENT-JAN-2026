@@ -10,37 +10,99 @@
 
 This document captures all findings, troubleshooting steps, and lessons learned during the setup of the Azure SRE Agent Proof of Concept. The PoC successfully integrated two MCP (Model Context Protocol) servers with Azure SRE Agent to create an autonomous diagnostic workflow.
 
-### Final Architecture
+### How This PoC Relates to grocery-sre-demo
+
+This PoC builds upon the **[grocery-sre-demo](https://github.com/deepthic/grocery-sre-demo)** sample application shared by Deepthi Chelupati. The relationship:
+
+| Component | Source | Purpose |
+|-----------|--------|---------|
+| **Grocery API** | `grocery-sre-demo/src/api` | Simulates a real app with rate limiting issues |
+| **Web Frontend** | `grocery-sre-demo/src/web` | UI to trigger demo scenarios |
+| **Loki** | Deployed separately | Log aggregation for the Grocery API |
+| **Azure Managed Grafana** | Auto-provisioned by SRE Agent | Visualization + Loki data source |
+| **MCP Servers** | Deployed based on grocery-sre-demo README | Enable AI agent to query logs & create tickets |
+| **Knowledge File** | `grocery-sre-demo/knowledge/loki-queries.md` | Pre-built LogQL patterns for the agent |
+| **Azure SRE Agent** | Azure Portal | Orchestrates the autonomous diagnostic workflow |
+
+The grocery-sre-demo provides the **demo scenario** (supplier rate limiting), and we deployed the **supporting infrastructure** (MCP servers, SRE Agent) to make it work end-to-end.
+
+### Final Architecture - Complete E2E Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Azure SRE Agent (aq-main)                       │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              DiagnosticExpert Subagent                       │   │
-│  │                    (96 tools)                                │   │
-│  └───────────────────┬─────────────────────┬───────────────────┘   │
-│                      │                     │                        │
-│              ┌───────┴───────┐     ┌───────┴───────┐               │
-│              │  grafana-mcp  │     │   jira-mcp    │               │
-│              │  (Connector)  │     │  (Connector)  │               │
-│              └───────┬───────┘     └───────┬───────┘               │
-└──────────────────────┼─────────────────────┼───────────────────────┘
-                       │                     │
-                       ▼                     ▼
-        ┌──────────────────────┐  ┌──────────────────────┐
-        │   Grafana MCP Server │  │    Jira MCP Server   │
-        │   (Container App)    │  │   (Container App)    │
-        │  StreamableHTTP      │  │       HTTP           │
-        │  Custom Docker Image │  │  sooperset/atlassian │
-        └──────────┬───────────┘  └──────────┬───────────┘
-                   │                         │
-                   ▼                         ▼
-        ┌──────────────────────┐  ┌──────────────────────┐
-        │  Azure Managed       │  │   Jira Cloud         │
-        │  Grafana + Loki      │  │   aq-r2d2.atlassian  │
-        └──────────────────────┘  └──────────────────────┘
+                                    ┌─────────────────────────────────────┐
+                                    │      Azure SRE Agent (aq-main)      │
+                                    │                                     │
+                                    │  ┌───────────────────────────────┐  │
+                                    │  │   DiagnosticExpert Subagent   │  │
+                                    │  │          (96 tools)           │  │
+                                    │  │   + loki-queries.md knowledge │  │
+                                    │  └──────────┬──────────┬─────────┘  │
+                                    │             │          │            │
+                                    │      ┌──────┴───┐  ┌───┴──────┐    │
+                                    │      │grafana-  │  │ jira-mcp │    │
+                                    │      │   mcp    │  │connector │    │
+                                    │      └────┬─────┘  └────┬─────┘    │
+                                    └───────────┼─────────────┼──────────┘
+                                                │             │
+                    ┌───────────────────────────┼─────────────┼───────────────────────────┐
+                    │                           ▼             ▼                           │
+                    │  ┌─────────────────────────────┐ ┌─────────────────────────────┐   │
+                    │  │  Grafana MCP Server         │ │   Jira MCP Server           │   │
+                    │  │  (ca-mcp-grafana)           │ │   (ca-mcp-jira)             │   │
+                    │  │  StreamableHTTP transport   │ │   HTTP transport            │   │
+                    │  │  Custom image in ACR        │ │   sooperset/mcp-atlassian   │   │
+                    │  └──────────────┬──────────────┘ └──────────────┬──────────────┘   │
+                    │                 │                               │                   │
+                    │                 ▼                               ▼                   │
+                    │  ┌─────────────────────────────┐ ┌─────────────────────────────┐   │
+                    │  │   Azure Managed Grafana     │ │   Jira Cloud                │   │
+                    │  │   (amg-ps64h2ydsavgc)       │ │   aq-r2d2.atlassian.net     │   │
+                    │  │   + Loki data source        │ │                             │   │
+                    │  └──────────────┬──────────────┘ └─────────────────────────────┘   │
+                    │                 │                                                   │
+                    │                 ▼                                                   │
+                    │  ┌─────────────────────────────┐                                   │
+                    │  │   Loki (ca-loki)            │◀──── Logs pushed via HTTP         │
+                    │  │   Log aggregation           │                                   │
+                    │  └─────────────────────────────┘                                   │
+                    │                 ▲                                                   │
+                    │                 │                                                   │
+                    │  ┌──────────────┴──────────────┐                                   │
+                    │  │   Grocery API               │ ◀─── FROM: grocery-sre-demo       │
+                    │  │   (ca-api-ps64h2ydsavgc)    │      Demo app with rate limiting  │
+                    │  │   Simulates supplier 429s   │                                   │
+                    │  └──────────────┬──────────────┘                                   │
+                    │                 ▲                                                   │
+                    │                 │                                                   │
+                    │  ┌──────────────┴──────────────┐                                   │
+                    │  │   Web Frontend              │ ◀─── FROM: grocery-sre-demo       │
+                    │  │   (ca-web-ps64h2ydsavgc)    │      "Trigger Rate Limit" button  │
+                    │  └─────────────────────────────┘                                   │
+                    │                                                                     │
+                    │            Azure Container Apps Environment (cae-ps64h2ydsavgc)    │
+                    └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### What Came From Where
+
+| Deployed Container App | Source | Deployed Via |
+|------------------------|--------|--------------|
+| `ca-api-ps64h2ydsavgc` | `grocery-sre-demo/src/api` | `azd up` |
+| `ca-web-ps64h2ydsavgc` | `grocery-sre-demo/src/web` | `azd up` |
+| `ca-loki` | `grafana/loki:2.9.0` | Manual `az containerapp create` |
+| `ca-mcp-grafana` | Custom image (see our fix) | Script + ACR build |
+| `ca-mcp-jira` | `ghcr.io/sooperset/mcp-atlassian` | Script |
+
+### Demo Scenario Flow
+
+1. **User** clicks "Trigger Rate Limit" in **Web Frontend**
+2. **Grocery API** makes 15 rapid calls to simulated supplier
+3. After 5 calls, supplier returns **429 Too Many Requests**
+4. Errors logged to **Loki** with `errorCode: SUPPLIER_RATE_LIMIT_429`
+5. **SRE Agent** receives incident → hands off to **DiagnosticExpert**
+6. **DiagnosticExpert** queries **Grafana MCP** → gets error logs from Loki
+7. Agent analyzes patterns using **loki-queries.md** knowledge
+8. Agent creates **Jira ticket** via **Jira MCP** with RCA
 
 ---
 
