@@ -30,26 +30,63 @@ fi
 
 echo -e "${GREEN}✓ Prerequisites OK${NC}\n"
 
-# Prompt for required variables
-echo -e "${YELLOW}Enter deployment details:${NC}"
-read -p "Resource Group name (e.g., rg-sre-poc-partner): " RG
-read -p "Container Apps Environment name (e.g., cae-xxxxx): " CAE_NAME
-read -p "Azure Managed Grafana URL (e.g., https://amg-xxxxx.grafana.azure.com): " AMG_URL
-read -sp "Grafana Service Account Token (starts with glsa_): " GRAFANA_TOKEN
-echo ""
+# Check for environment variables, prompt only if not set
+if [ -z "$RG" ]; then
+    echo -e "${YELLOW}Enter deployment details:${NC}"
+    read -p "Resource Group name (e.g., rg-sre-poc-partner): " RG
+fi
 
-echo ""
-echo -e "${YELLOW}Enter Jira credentials:${NC}"
-read -p "Jira URL (e.g., https://yourorg.atlassian.net): " JIRA_URL
-read -p "Jira email: " JIRA_EMAIL
-read -sp "Jira API token: " JIRA_TOKEN
-echo ""
+if [ -z "$CAE_NAME" ]; then
+    read -p "Container Apps Environment name (e.g., cae-xxxxx): " CAE_NAME
+fi
+
+if [ -z "$AMG_URL" ]; then
+    read -p "Azure Managed Grafana URL (e.g., https://amg-xxxxx.grafana.azure.com): " AMG_URL
+fi
+
+if [ -z "$GRAFANA_TOKEN" ]; then
+    read -sp "Grafana Service Account Token (starts with glsa_): " GRAFANA_TOKEN
+    echo ""
+fi
+
+if [ -z "$JIRA_URL" ]; then
+    echo ""
+    echo -e "${YELLOW}Enter Jira credentials:${NC}"
+    read -p "Jira URL (e.g., https://yourorg.atlassian.net): " JIRA_URL
+fi
+
+if [ -z "$JIRA_EMAIL" ]; then
+    read -p "Jira email: " JIRA_EMAIL
+fi
+
+if [ -z "$JIRA_API_TOKEN" ]; then
+    read -sp "Jira API token: " JIRA_API_TOKEN
+    echo ""
+fi
+
+# Use JIRA_API_TOKEN variable consistently
+JIRA_TOKEN="$JIRA_API_TOKEN"
 
 # Validation
 if [ -z "$RG" ] || [ -z "$CAE_NAME" ] || [ -z "$AMG_URL" ] || [ -z "$GRAFANA_TOKEN" ]; then
-    echo -e "${RED}All fields are required. Exiting.${NC}"
+    echo -e "${RED}Required deployment details missing. Exiting.${NC}"
     exit 1
 fi
+
+if [ -z "$JIRA_URL" ] || [ -z "$JIRA_EMAIL" ] || [ -z "$JIRA_TOKEN" ]; then
+    echo -e "${RED}Required Jira credentials missing. Exiting.${NC}"
+    exit 1
+fi
+
+echo ""
+echo -e "${GREEN}Using configuration:${NC}"
+echo -e "  RG: ${GREEN}$RG${NC}"
+echo -e "  Container Apps Environment: ${GREEN}$CAE_NAME${NC}"
+echo -e "  Grafana URL: ${GREEN}$AMG_URL${NC}"
+echo -e "  Grafana Token: ${GREEN}glsa_****${NC}"
+echo -e "  Jira URL: ${GREEN}$JIRA_URL${NC}"
+echo -e "  Jira Email: ${GREEN}$JIRA_EMAIL${NC}"
+echo ""
 
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
@@ -57,22 +94,21 @@ echo -e "${GREEN}║   Deploying Grafana MCP Server                            �
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
 
 # Deploy Grafana MCP Server
+# Using mcp/grafana from Docker Hub - configured via environment variables
 az containerapp create \
   --name ca-mcp-grafana \
   --resource-group "$RG" \
   --environment "$CAE_NAME" \
-  --image ghcr.io/grafana/mcp-grafana:latest \
+  --image mcp/grafana:latest \
   --target-port 8000 \
   --ingress external \
   --min-replicas 1 \
   --max-replicas 2 \
-  --cpu 0.25 \
-  --memory 0.5Gi \
+  --cpu 0.5 \
+  --memory 1Gi \
   --env-vars \
     "GRAFANA_URL=$AMG_URL" \
     "GRAFANA_SERVICE_ACCOUNT_TOKEN=$GRAFANA_TOKEN" \
-  --command "/usr/local/bin/mcp-server-grafana" \
-  --args "-transport" "streamable-http" "-address" "0.0.0.0:8000" \
   --output none
 
 # Get Grafana MCP URL
@@ -104,24 +140,22 @@ echo -e "${GREEN}║   Deploying Jira MCP Server                               �
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
 
 # Deploy Jira MCP Server
+# Using mcp/atlassian from Docker Hub (supports Jira and Confluence)
 az containerapp create \
   --name ca-mcp-jira \
   --resource-group "$RG" \
   --environment "$CAE_NAME" \
-  --image ghcr.io/sooperset/mcp-atlassian:latest \
+  --image mcp/atlassian:latest \
   --target-port 8000 \
   --ingress external \
   --min-replicas 1 \
   --max-replicas 2 \
-  --cpu 0.25 \
-  --memory 0.5Gi \
+  --cpu 0.5 \
+  --memory 1Gi \
   --env-vars \
     "JIRA_URL=$JIRA_URL" \
     "JIRA_USERNAME=$JIRA_EMAIL" \
     "JIRA_API_TOKEN=$JIRA_TOKEN" \
-    "TRANSPORT=streamable-http" \
-    "HOST=0.0.0.0" \
-    "PORT=8000" \
   --output none
 
 # Get Jira MCP URL

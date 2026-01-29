@@ -1,0 +1,15 @@
+cd /Users/arturoquiroga/GITHUB/SRE-AGENT-JAN-2026/grocery-sre-demo && azd env get-values
+
+AZURE_CONTAINER_APPS_ENVIRONMENT_ID="/subscriptions/7a28b21e-0d3e-4435-a686-d92889d4ee96/resourceGroups/rg-aqsre/providers/Microsoft.App/managedEnvironments/cae-ps64h2ydsavgc"
+AZURE_CONTAINER_APPS_ENVIRONMENT_NAME="cae-ps64h2ydsavgc"
+AZURE_CONTAINER_REGISTRY_ENDPOINT="crps64h2ydsavgc.azurecr.io"
+AZURE_CONTAINER_REGISTRY_NAME="crps64h2ydsavgc"
+AZURE_ENV_NAME="aqsre"
+AZURE_LOCATION="eastus2"
+AZURE_RESOURCE_GROUP="rg-aqsre"
+AZURE_SUBSCRIPTION_ID="7a28b21e-0d3e-4435-a686-d92889d4ee96"
+AZURE_TENANT_ID="a172a259-b1c7-4944-b2e1-6d551f954711"
+GRAFANA_ENDPOINT="https://amg-ps64h2ydsavgc-cvauf6fsdra3c0ed.eus2.grafana.azure.com"
+SERVICE_API_IMAGE_NAME="crps64h2ydsavgc.azurecr.io/grocery-sre-demo/api-aqsre:azd-deploy-1769631079"
+SERVICE_API_RESOURCE_EXISTS="false"
+SERVICE_WEB_IMAGE_NAME="crps64h2ydsavgc.azurecr.io/grocery-sre-demo/web-aqsre:azd-deploy-1769631083"

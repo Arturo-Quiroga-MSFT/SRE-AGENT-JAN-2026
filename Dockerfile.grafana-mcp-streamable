@@ -1,0 +1,4 @@
+FROM grafana/mcp-grafana:latest
+
+# Force Streamable HTTP transport for Azure SRE Agent connector compatibility
+ENTRYPOINT ["/app/mcp-grafana","-t","streamable-http","--address","0.0.0.0:8000","--endpoint-path","/mcp"]
