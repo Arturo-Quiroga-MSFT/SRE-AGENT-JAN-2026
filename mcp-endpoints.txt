@@ -1,0 +1,38 @@
+═══════════════════════════════════════════════════════════
+   MCP Server Endpoints - Phase 4 Complete
+═══════════════════════════════════════════════════════════
+
+✅ Grafana MCP Server (DEPLOYED & VALIDATED):
+  SSE URL: https://ca-mcp-grafana.icymeadow-96da5d2b.eastus2.azurecontainerapps.io/sse
+  Transport: SSE (Server-Sent Events)
+  Status: ✅ Responding correctly
+  Integration: Can query Loki logs via Grafana API
+  Token: glsa_SkH1KcoKzOHFfMc8hJRGqZ8Ay36bE7ao_f5fadede (non-expiring)
+  
+✅ Jira MCP Server (DEPLOYED & VALIDATED):
+  SSE URL: https://ca-mcp-jira.icymeadow-96da5d2b.eastus2.azurecontainerapps.io/sse
+  Transport: SSE (Server-Sent Events)
+  Status: ✅ Responding correctly - FastMCP 2.14.1
+  Image: ghcr.io/sooperset/mcp-atlassian:latest
+  Integration: Create/manage Jira tickets, query issues
+  
+  Jira Configuration:
+    URL: https://aq-r2d2.atlassian.net
+    Username: arturoqu@microsoft.com
+    API Token: ATATT3xFfGF0di6KbEg091E1uEI4rWwukXPo26O_AUJHZp41VdSIIopUYmN8g-CDKXoxfeUVqNztlrP6Au2Gl7TTCA02LYNiDtxObar4JIkrpdknkwsITYuNXI4j7i09cAV4XE9-qbQjePo0txnWYjnoQfpcByJf_0ye5ImTZUyORbrmC-9sGiU=4D3ADC20
+
+═══════════════════════════════════════════════════════════
+🎯 Phase 5: Azure SRE Agent Setup (20 minutes)
+═══════════════════════════════════════════════════════════
+
+1. Go to Azure SRE Agent portal: https://aka.ms/sreagent/portal
+2. Create main agent:
+   - Monitor resource group: rg-aqsre
+   - Location: eastus2
+3. Create sub-agent "DiagnosticExpert" with:
+   - Grafana MCP tool (SSE URL above)
+   - Jira tools (if available natively, or skip for now)
+4. Create knowledge file with Loki query patterns
+5. Test with rate-limit scenario
+
+═══════════════════════════════════════════════════════════
