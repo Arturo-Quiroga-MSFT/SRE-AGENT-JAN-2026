@@ -38,48 +38,48 @@ The grocery-sre-demo provides the **demo scenario** (supplier rate limiting), an
                                     │  │   + loki-queries.md knowledge │  │
                                     │  └──────────┬──────────┬─────────┘  │
                                     │             │          │            │
-                                    │      ┌──────┴───┐  ┌───┴──────┐    │
-                                    │      │grafana-  │  │ jira-mcp │    │
-                                    │      │   mcp    │  │connector │    │
-                                    │      └────┬─────┘  └────┬─────┘    │
-                                    └───────────┼─────────────┼──────────┘
+                                    │      ┌──────┴───┐  ┌───┴──────┐     │
+                                    │      │grafana-  │  │ jira-mcp │     │
+                                    │      │   mcp    │  │connector │     │
+                                    │      └────┬─────┘  └────┬─────┘     │
+                                    └───────────┼─────────────┼───────── ─┘
                                                 │             │
                     ┌───────────────────────────┼─────────────┼───────────────────────────┐
                     │                           ▼             ▼                           │
-                    │  ┌─────────────────────────────┐ ┌─────────────────────────────┐   │
-                    │  │  Grafana MCP Server         │ │   Jira MCP Server           │   │
-                    │  │  (ca-mcp-grafana)           │ │   (ca-mcp-jira)             │   │
-                    │  │  StreamableHTTP transport   │ │   HTTP transport            │   │
-                    │  │  Custom image in ACR        │ │   sooperset/mcp-atlassian   │   │
-                    │  └──────────────┬──────────────┘ └──────────────┬──────────────┘   │
+                    │  ┌─────────────────────────────┐ ┌─────────────────────────────┐    │
+                    │  │  Grafana MCP Server         │ │   Jira MCP Server           │    │
+                    │  │  (ca-mcp-grafana)           │ │   (ca-mcp-jira)             │    │
+                    │  │  StreamableHTTP transport   │ │   HTTP transport            │    │
+                    │  │  Custom image in ACR        │ │   sooperset/mcp-atlassian   │    │
+                    │  └──────────────┬──────────────┘ └──────────────┬──────────────┘    │
                     │                 │                               │                   │
                     │                 ▼                               ▼                   │
-                    │  ┌─────────────────────────────┐ ┌─────────────────────────────┐   │
-                    │  │   Azure Managed Grafana     │ │   Jira Cloud                │   │
-                    │  │   (amg-ps64h2ydsavgc)       │ │   aq-r2d2.atlassian.net     │   │
-                    │  │   + Loki data source        │ │                             │   │
-                    │  └──────────────┬──────────────┘ └─────────────────────────────┘   │
+                    │  ┌─────────────────────────────┐ ┌─────────────────────────────┐    │
+                    │  │   Azure Managed Grafana     │ │   Jira Cloud                │    │
+                    │  │   (amg-ps64h2ydsavgc)       │ │   aq-r2d2.atlassian.net     │    │
+                    │  │   + Loki data source        │ │                             │    │
+                    │  └──────────────┬──────────────┘ └─────────────────────────────┘    │
                     │                 │                                                   │
                     │                 ▼                                                   │
-                    │  ┌─────────────────────────────┐                                   │
-                    │  │   Loki (ca-loki)            │◀──── Logs pushed via HTTP         │
-                    │  │   Log aggregation           │                                   │
-                    │  └─────────────────────────────┘                                   │
+                    │  ┌─────────────────────────────┐                                    │
+                    │  │   Loki (ca-loki)            │◀──── Logs pushed via HTTP          │
+                    │  │   Log aggregation           │                                    │
+                    │  └─────────────────────────────┘                                    │
                     │                 ▲                                                   │
                     │                 │                                                   │
-                    │  ┌──────────────┴──────────────┐                                   │
-                    │  │   Grocery API               │ ◀─── FROM: grocery-sre-demo       │
-                    │  │   (ca-api-ps64h2ydsavgc)    │      Demo app with rate limiting  │
-                    │  │   Simulates supplier 429s   │                                   │
-                    │  └──────────────┬──────────────┘                                   │
+                    │  ┌──────────────┴──────────────┐                                    │
+                    │  │   Grocery API               │ ◀─── FROM: grocery-sre-demo        │
+                    │  │   (ca-api-ps64h2ydsavgc)    │      Demo app with rate limiting   │
+                    │  │   Simulates supplier 429s   │                                    │
+                    │  └──────────────┬──────────────┘                                    │
                     │                 ▲                                                   │
                     │                 │                                                   │
-                    │  ┌──────────────┴──────────────┐                                   │
-                    │  │   Web Frontend              │ ◀─── FROM: grocery-sre-demo       │
-                    │  │   (ca-web-ps64h2ydsavgc)    │      "Trigger Rate Limit" button  │
-                    │  └─────────────────────────────┘                                   │
+                    │  ┌──────────────┴──────────────┐                                    │
+                    │  │   Web Frontend              │ ◀─── FROM: grocery-sre-demo        │
+                    │  │   (ca-web-ps64h2ydsavgc)    │      "Trigger Rate Limit" button   │
+                    │  └─────────────────────────────┘                                    │
                     │                                                                     │
-                    │            Azure Container Apps Environment (cae-ps64h2ydsavgc)    │
+                    │            Azure Container Apps Environment (cae-ps64h2ydsavgc)     │
                     └─────────────────────────────────────────────────────────────────────┘
 ```
 
