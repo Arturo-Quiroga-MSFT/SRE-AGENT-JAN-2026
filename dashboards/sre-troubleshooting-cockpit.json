@@ -1,0 +1,244 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "SRE Troubleshooting Cockpit — scoped to service, time window. Golden signals + error analysis.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "title": "🚨 Error Rate (per 5 min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "rate({app=\"$service\", level=\"error\"} [$__interval])",
+          "legendFormat": "Errors/sec",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "drawStyle": "line",
+            "pointSize": 5
+          }
+        }
+      }
+    },
+    {
+      "title": "⚠️ Warning Rate (per 5 min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "rate({app=\"$service\", level=\"warn\"} [$__interval])",
+          "legendFormat": "Warnings/sec",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "yellow" },
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "drawStyle": "line"
+          }
+        }
+      }
+    },
+    {
+      "title": "📊 Error Count by Error Code (last 1h)",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (errorCode) (count_over_time({app=\"$service\", level=\"error\"} | json [1h]))",
+          "legendFormat": "{{errorCode}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "🔥 Errors vs Warnings vs Info (last 1h)",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "count_over_time({app=\"$service\", level=\"error\"} [1h])",
+          "legendFormat": "Errors",
+          "refId": "A"
+        },
+        {
+          "expr": "count_over_time({app=\"$service\", level=\"warn\"} [1h])",
+          "legendFormat": "Warnings",
+          "refId": "B"
+        },
+        {
+          "expr": "count_over_time({app=\"$service\", level=\"info\"} [1h])",
+          "legendFormat": "Info",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "📋 Recent Error Logs",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "{app=\"$service\", level=\"error\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "title": "📋 Recent Warning Logs",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 26 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "{app=\"$service\", level=\"warn\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "title": "🕐 Error Frequency Heatmap (by hour)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 36 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"$service\", level=\"error\"} [5m]))",
+          "legendFormat": "Error count",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(count_over_time({app=\"$service\", level=\"warn\"} [5m]))",
+          "legendFormat": "Warning count",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 30,
+            "lineWidth": 2,
+            "drawStyle": "bars",
+            "stacking": { "mode": "normal" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Error count" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Warning count" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          }
+        ]
+      }
+    },
+    {
+      "title": "📈 Rate Limit (429) Events Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 44 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "count_over_time({app=\"$service\"} |= \"429\" [5m])",
+          "legendFormat": "429 Rate Limit Hits",
+          "refId": "A"
+        },
+        {
+          "expr": "count_over_time({app=\"$service\"} |= \"timeout\" [5m])",
+          "legendFormat": "Timeouts",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "drawStyle": "line",
+            "pointSize": 5
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "429 Rate Limit Hits" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Timeouts" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          }
+        ]
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["sre", "troubleshooting", "incident"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "label": "Data Source"
+      },
+      {
+        "name": "service",
+        "type": "custom",
+        "query": "grocery-api",
+        "current": { "text": "grocery-api", "value": "grocery-api" },
+        "label": "Service",
+        "options": [
+          { "text": "grocery-api", "value": "grocery-api", "selected": true }
+        ]
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "SRE Troubleshooting Cockpit",
+  "uid": "sre-cockpit-v1",
+  "version": 1
+}
