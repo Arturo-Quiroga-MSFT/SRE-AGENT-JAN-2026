@@ -1,0 +1,158 @@
+<mxfile host="65bd71144e">
+    <diagram name="SRE Agent Architecture" id="sre-arch-march-2026">
+        <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <!-- Azure Subscription -->
+                <mxCell id="2" value="Azure Subscription: ARTURO-MngEnvMCAP094150" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14;arcSize=5;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="20" width="1560" height="1100" as="geometry"/>
+                </mxCell>
+                <!-- Resource Group -->
+                <mxCell id="3" value="Resource Group: rg-aqsre (East US 2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontStyle=1;fontSize=12;arcSize=5;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="60" width="1520" height="1040" as="geometry"/>
+                </mxCell>
+                <!-- Container Apps Environment -->
+                <mxCell id="4" value="Container Apps Environment: cae-ps64h2ydsavgc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontStyle=1;fontSize=11;arcSize=5;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="100" width="700" height="500" as="geometry"/>
+                </mxCell>
+                <!-- Web Frontend -->
+                <mxCell id="10" value="ca-web-ps64h2ydsavgc&#xa;🌐 Web Frontend&#xa;(grocery-sre-demo)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#ffffff;strokeColor=#005a9e;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="150" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Grocery API -->
+                <mxCell id="11" value="ca-api-ps64h2ydsavgc&#xa;📦 Grocery API&#xa;(Node.js)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#ffffff;strokeColor=#005a9e;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="280" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Loki -->
+                <mxCell id="12" value="ca-loki&#xa;📋 Loki&#xa;(Log Aggregation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2c3e50;fontColor=#ffffff;strokeColor=#1a252f;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="420" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Grafana MCP -->
+                <mxCell id="13" value="ca-mcp-grafana&#xa;🔌 Grafana MCP Server&#xa;(Streamable-HTTP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#60a917;fontColor=#ffffff;strokeColor=#3d6f0e;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="150" width="280" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Jira MCP -->
+                <mxCell id="14" value="ca-mcp-jira&#xa;🔌 Jira MCP Server&#xa;(FastMCP 2.14.5)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#60a917;fontColor=#ffffff;strokeColor=#3d6f0e;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="280" width="280" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Azure Managed Grafana -->
+                <mxCell id="20" value="amg-ps64h2ydsavgc&#xa;📊 Azure Managed Grafana&#xa;+ Loki Data Source&#xa;+ Service Account Token" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f46800;fontColor=#ffffff;strokeColor=#c45000;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="660" width="280" height="100" as="geometry"/>
+                </mxCell>
+                <!-- ACR -->
+                <mxCell id="21" value="crps64h2ydsavgc&#xa;🗄️ Azure Container Registry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#ffffff;strokeColor=#005a9e;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="660" width="280" height="60" as="geometry"/>
+                </mxCell>
+                <!-- App Insights -->
+                <mxCell id="22" value="aq-app-insights-001&#xa;📈 Application Insights" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#ffffff;strokeColor=#005a9e;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="740" width="280" height="60" as="geometry"/>
+                </mxCell>
+                <!-- SRE Agent -->
+                <mxCell id="30" value="Azure SRE Agent: aq-main" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff8f00;fontColor=#ffffff;strokeColor=#e65100;verticalAlign=top;fontStyle=1;fontSize=12;arcSize=5;" vertex="1" parent="1">
+                    <mxGeometry x="820" y="100" width="700" height="500" as="geometry"/>
+                </mxCell>
+                <!-- Main Agent -->
+                <mxCell id="31" value="Main Agent&#xa;🤖 Orchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#ff8f00;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="860" y="150" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <!-- DiagnosticExpert -->
+                <mxCell id="32" value="DiagnosticExpert&#xa;🔬 Subagent&#xa;(127 tools)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#ff8f00;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="860" y="260" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Knowledge -->
+                <mxCell id="33" value="📄 Knowledge Base&#xa;loki-queries.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="860" y="390" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <!-- Connector: Grafana -->
+                <mxCell id="34" value="Connector: grafana-mcp&#xa;(Streamable-HTTP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="1140" y="150" width="220" height="60" as="geometry"/>
+                </mxCell>
+                <!-- Connector: Jira -->
+                <mxCell id="35" value="Connector: jira-mcp&#xa;(Streamable-HTTP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+                    <mxGeometry x="1140" y="260" width="220" height="60" as="geometry"/>
+                </mxCell>
+                <!-- Jira Cloud (External) -->
+                <mxCell id="40" value="☁️ Jira Cloud&#xa;aq-r2d2.atlassian.net&#xa;Project: SCRUM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0052cc;fontColor=#ffffff;strokeColor=#003d99;fontSize=11;" vertex="1" parent="1">
+                    <mxGeometry x="1140" y="660" width="280" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Arrows -->
+                <!-- Web -> API -->
+                <mxCell id="50" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="10" target="11" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="50l" value="Triggers scenarios" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="50">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- API -> Loki -->
+                <mxCell id="51" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="11" target="12" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="51l" value="Pushes logs (HTTP)" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="51">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Grafana -> Loki -->
+                <mxCell id="52" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="20" target="12" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="52l" value="Queries logs" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="52">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Grafana MCP -> Grafana -->
+                <mxCell id="53" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="13" target="20" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="53l" value="SA Token" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="53">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Jira MCP -> Jira Cloud -->
+                <mxCell id="54" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="14" target="40" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="54l" value="API Token" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="54">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- ACR -> CAE -->
+                <mxCell id="55" style="edgeStyle=orthogonalEdgeStyle;dashed=1;" edge="1" source="21" target="4" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="55l" value="Pulls images" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="55">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Main -> Diagnostic -->
+                <mxCell id="60" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#e65100;" edge="1" source="31" target="32" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="60l" value="Handoff" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="60">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Diagnostic -> Knowledge -->
+                <mxCell id="61" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#e65100;" edge="1" source="32" target="33" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Diagnostic -> Grafana Connector -->
+                <mxCell id="62" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#e65100;" edge="1" source="32" target="34" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Diagnostic -> Jira Connector -->
+                <mxCell id="63" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#e65100;" edge="1" source="32" target="35" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Grafana Connector -> Grafana MCP -->
+                <mxCell id="64" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;" edge="1" source="34" target="13" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="64l" value="Streamable-HTTP" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="64">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Jira Connector -> Jira MCP -->
+                <mxCell id="65" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;" edge="1" source="35" target="14" parent="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="65l" value="Streamable-HTTP" style="edgeLabel;html=1;fontSize=9;" vertex="1" connectable="0" parent="65">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

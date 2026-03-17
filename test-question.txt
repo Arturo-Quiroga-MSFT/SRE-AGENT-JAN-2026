@@ -1,0 +1,1 @@
+My container app ca-api-ps64h2ydsavgc in resource group rg-aqsre is experiencing rate limit errors from a supplier API when checking product inventory. Can you investigate the logs from the last 24 hours?
