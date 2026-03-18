@@ -43,21 +43,26 @@ to demo for George.
 |------|--------|----------|
 | Gap analysis vs Zafin 2026 roadmap | Done | `partner-context/ZAFIN_GAP_ANALYSIS_MARCH_2026.md` |
 | SRE Agent recreated after cost-savings deletion | Done | Agent `aq-main`, both MCP connectors reconnected |
-| DiagnosticExpert v2 instructions | Done | `docs/DIAGNOSTIC_EXPERT_INSTRUCTIONS_V2.md` |
-| RCA Agent instructions (net new sub-agent) | Done | `docs/RCA_AGENT_INSTRUCTIONS.md` |
-| Troubleshooting Cockpit dashboard (8 panels) | Done | `dashboards/sre-troubleshooting-cockpit.json` |
+| DiagnosticExpert v2 instructions | Done — deployed in Agent Canvas | `docs/DIAGNOSTIC_EXPERT_INSTRUCTIONS_V2.md` |
+| RCA Agent (net new sub-agent) | Done — created, tested, generating 213-line RCA docs | `docs/RCA_AGENT_INSTRUCTIONS.md` |
+| Troubleshooting Cockpit dashboard (8 panels) | Done — imported into Grafana, all panels rendering | `dashboards/sre-troubleshooting-cockpit.json` |
 | Loki log generator script | Done | `scripts/generate_loki_logs.py` |
 | Architecture diagrams (Mermaid + Draw.io) | Done | `docs/sre-agent-architecture.*` |
 | Quick-recreate runbook | Done | `docs/SRE_AGENT_QUICK_RECREATE.md` |
 
-### What still needs to happen
+### Verified working (March 18)
 
-| Item | Notes |
-|------|-------|
-| Import Cockpit dashboard into Grafana | JSON ready, just need to import via Grafana UI |
-| Apply DiagnosticExpert v2 instructions in portal | Copy-paste into Agent Canvas |
-| Create RCA Agent in Agent Canvas | New sub-agent, wire handoff from DiagnosticExpert |
-| Test full flow end-to-end | DiagnosticExpert → RCA Agent with live Loki data |
+- Troubleshooting Cockpit imported into Grafana — all 8 panels rendering
+  with live Loki data (error rate, warning rate, error code bars,
+  pie chart, error logs, warning logs, heatmap, rate limit timeline)
+- RCAAgent created in Agent Canvas and tested — generates 213-line RCA
+  documents including executive summary, timeline, root cause, corrective
+  actions (10 items), and customer communication draft
+- RCAAgent self-identified operational gaps: zero alert rules, no
+  Prometheus datasource, Loki patterns API 404, no Jira integration —
+  this is exactly the kind of proactive insight the roadmap calls for
+- Full reactive flow working: incident prompt → DiagnosticExpert
+  investigation → RCAAgent document generation
 
 ---
 
@@ -70,18 +75,18 @@ Summary below for discussion.
 
 | Step | What Zafin wants | Jan PoC | March progress | Remaining gap |
 |------|------------------|---------|----------------|---------------|
-| 1 | Troubleshooting Cockpit URL in Jira ticket | None | Dashboard JSON created | Import + parameterized URL injection |
+| 1 | Troubleshooting Cockpit URL in Jira ticket | None | **Dashboard deployed in Grafana** | Parameterized URL injection into Jira tickets |
 | 2a | Infra Debug Bundle Agent | None | None | **Ankit candidate** — new sub-agent |
 | 2b | Application Context Agent | None | None | **Ankit candidate** — new sub-agent |
 | 3 | Orchestrator/Classifier Agent | None | None | Depends on 2a + 2b outputs |
-| 4 | SRE Analysis Agent (structured mitigations) | Partial | DiagnosticExpert v2 written | Apply + test |
-| 5 | RCA Agent (Living RCA, customer comms) | None | Instructions written | Create in portal + test |
+| 4 | SRE Analysis Agent (structured mitigations) | Partial | **DiagnosticExpert v2 deployed + tested** | Done for demo scope |
+| 5 | RCA Agent (Living RCA, customer comms) | None | **RCAAgent deployed + tested (213-line RCA)** | Confluence storage (defer to P3) |
 
 ### Troubleshooting Cockpit (Experience 2)
 
 | Item | March progress | Remaining |
 |------|----------------|-----------|
-| Golden signals dashboard | 8-panel JSON ready | Import, add deploy markers |
+| Golden signals dashboard | **Deployed and verified** — 8 panels rendering | Add deploy/config change markers |
 | Auto-zoom to incident window | Not started | Parameterized URL with time range |
 | "Analyze current view" button | Not started | Grafana plugin or deep link |
 
@@ -105,9 +110,9 @@ Carried forward from the gap analysis, open for discussion.
 | Priority | Item | Status |
 |----------|------|--------|
 | P1 | Ticket enrichment + Cockpit link injection | In progress |
-| P1 | DiagnosticExpert v2 (structured output, commands) | Written, needs deploy |
+| P1 | DiagnosticExpert v2 (structured output, commands) | **Done — deployed + tested** |
 | P2 | Orchestrator/Classifier logic | Not started |
-| P3 | RCA Agent + customer-facing comms | Written, needs deploy |
+| P3 | RCA Agent + customer-facing comms | **Done — deployed + tested** |
 
 ### Ankit
 
@@ -195,13 +200,15 @@ Carried forward from the gap analysis, open for discussion.
 
 | Action | Owner | By when |
 |--------|-------|---------|
-| Import Cockpit dashboard into Grafana + test | Arturo | March 19 |
-| Apply DiagnosticExpert v2 + RCA Agent in portal | Arturo | March 19 |
-| Test full reactive flow end-to-end | Arturo | March 20 |
+| ~~Import Cockpit dashboard into Grafana + test~~ | ~~Arturo~~ | ~~Done~~ |
+| ~~Apply DiagnosticExpert v2 + RCA Agent in portal~~ | ~~Arturo~~ | ~~Done~~ |
+| ~~Test full reactive flow end-to-end~~ | ~~Arturo~~ | ~~Done~~ |
 | Start Infra Debug Bundle Agent design | Ankit | March 21 |
 | Decide on Jira MCP fix approach | Both | March 19 |
 | Share repo access with Ankit | Arturo | Today |
 | Review gap analysis doc | Ankit | March 19 |
+| Add parameterized Cockpit URL to Jira ticket enrichment | Arturo | March 21 |
+| Explore Grafana alerting rules for 429 detection | Arturo | March 21 |
 
 ---
 
