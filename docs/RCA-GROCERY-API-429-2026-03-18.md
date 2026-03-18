@@ -112,7 +112,7 @@ The `grocery-api` service is exceeding the **FreshFoods Wholesale API** rate lim
 | 3 | Implement response caching for inventory data (TTL 30–60s) | App Team | **High** | TBD | Open |
 | 4 | Honor `retryAfter` headers with exponential backoff | App Team | **High** | TBD | Open |
 | 5 | Investigate batch/bulk inventory API from FreshFoods to reduce call volume | App Team / Vendor Mgmt | **Medium** | TBD | Open |
-| 6 | Create Grafana alert rule for 429 error rate threshold (> 5 errors in 5 min) | SRE Team | **Critical** | TBD | Open |
+| 6 | Create Grafana alert rule for 429 error rate threshold (> 5 errors in 5 min) | SRE Team | **Critical** | 2026-03-18 | **Done** — UID `bfge66fq0yjnkf`, folder "SRE Alerts" |
 | 7 | Add Prometheus metrics exporter for HTTP error codes and supplier API latency | SRE Team | **High** | TBD | Open |
 | 8 | Create runbook for supplier rate-limit incidents (escalation path, vendor contact) | SRE Team | **Medium** | TBD | Open |
 | 9 | Request rate limit increase from FreshFoods Wholesale API vendor | Vendor Management | **Medium** | TBD | Open |

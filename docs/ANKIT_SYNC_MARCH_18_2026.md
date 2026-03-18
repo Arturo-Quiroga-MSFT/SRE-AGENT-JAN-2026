@@ -61,8 +61,12 @@ to demo for George.
 - RCAAgent self-identified operational gaps: zero alert rules, no
   Prometheus datasource, Loki patterns API 404, no Jira integration —
   this is exactly the kind of proactive insight the roadmap calls for
+- RCAAgent then **executed its own corrective action** — created a
+  Grafana alert rule for 429 detection (>5 errors in 5 min, folder
+  "SRE Alerts", severity=high) via grafana-mcp tools autonomously
 - Full reactive flow working: incident prompt → DiagnosticExpert
-  investigation → RCAAgent document generation
+  investigation → RCAAgent document generation → corrective action
+  execution
 
 ---
 
@@ -203,12 +207,13 @@ Carried forward from the gap analysis, open for discussion.
 | ~~Import Cockpit dashboard into Grafana + test~~ | ~~Arturo~~ | ~~Done~~ |
 | ~~Apply DiagnosticExpert v2 + RCA Agent in portal~~ | ~~Arturo~~ | ~~Done~~ |
 | ~~Test full reactive flow end-to-end~~ | ~~Arturo~~ | ~~Done~~ |
+| ~~Explore Grafana alerting rules for 429 detection~~ | ~~Arturo~~ | ~~Done — RCAAgent created it autonomously~~ |
 | Start Infra Debug Bundle Agent design | Ankit | March 21 |
 | Decide on Jira MCP fix approach | Both | March 19 |
 | Share repo access with Ankit | Arturo | Today |
 | Review gap analysis doc | Ankit | March 19 |
 | Add parameterized Cockpit URL to Jira ticket enrichment | Arturo | March 21 |
-| Explore Grafana alerting rules for 429 detection | Arturo | March 21 |
+| Configure Grafana notification contact point (Slack/email) | Arturo | March 21 |
 
 ---
 
