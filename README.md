@@ -44,6 +44,13 @@ SRE-AGENT-JAN-2026/
 │   ├── setup-status.sh                    # Check deployment status
 │   └── test-grafana-mcp-local.sh          # Test MCP server locally
 │
+├── aks-private-testbed/                   # 🔬 AKS Private VNet Test Bed
+│   ├── README.md                          # Full deployment guide
+│   ├── LESSONS-LEARNED.md                 # 8 documented quirks from deployment
+│   ├── infra/                             # Bicep: VNet, private AKS, ACR, alerts
+│   ├── k8s/                               # K8s manifests + crash simulator
+│   └── scripts/                           # 01-provision → 05-trigger-incident
+│
 ├── partner-context/                       # 🏢 Partner-Specific Docs
 │   └── ZAFIN_CONTEXT.md                   # Zafin requirements & constraints
 │
@@ -72,6 +79,8 @@ SRE-AGENT-JAN-2026/
 | **Track deployment progress** | [DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md) |
 | **Understand the Grafana MCP fix** | [Dockerfile.grafana-mcp-streamable](Dockerfile.grafana-mcp-streamable) |
 | **Get MCP server URLs** | [mcp-endpoints.txt](docs/mcp-endpoints.txt) |
+| **Deploy AKS private VNet test bed** | [aks-private-testbed/README.md](aks-private-testbed/README.md) |
+| **Understand SRE Agent + private AKS pattern** | [aks-private-testbed/LESSONS-LEARNED.md](aks-private-testbed/LESSONS-LEARNED.md) |
 
 ---
 
@@ -92,39 +101,43 @@ See [SETUP_FINDINGS_AND_LESSONS_LEARNED.md](docs/SETUP_FINDINGS_AND_LESSONS_LEAR
 
 ## 🏗️ Architecture
 
+### PoC demo environment (Container Apps + Grafana/Loki + Jira)
+
+```mermaid
+graph TD
+    Agent["🤖 Azure SRE Agent\naq-main"] --> Sub["DiagnosticExpert Subagent\n96 tools + knowledge file"]
+
+    Sub --> GrafanaMCP["grafana-mcp\nConnector"]
+    Sub --> JiraMCP["jira-mcp\nConnector"]
+
+    GrafanaMCP --> GrafanaSrv["Grafana MCP Server\nStreamable-HTTP\nCustom Docker image"]
+    JiraMCP --> JiraSrv["Jira MCP Server\nHTTP transport\nsooperset/mcp-atlassian"]
+
+    GrafanaSrv --> Grafana["Azure Managed Grafana\n+ Loki"]
+    JiraSrv --> JiraCloud["Jira Cloud\naq-r2d2.atlassian"]
+
+    Grafana --> GroceryAPI["Grocery API\nContainer App\n⚡ generates 429 errors"]
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Azure SRE Agent (aq-main)                       │
-│                                                                     │
-│                 ┌───────────────────────────────────┐               │
-│                 │   DiagnosticExpert Subagent       │               │
-│                 │   (96 tools + knowledge file)     │               │
-│                 └─────────────┬─────────────────────┘               │
-│                               │                                     │
-│              ┌────────────────┼────────────────┐                    │
-│              ▼                                 ▼                    │
-│       grafana-mcp                        jira-mcp                   │
-│       (Connector)                       (Connector)                 │
-└──────────┬────────────────────────────────────┬─────────────────────┘
-           │                                    │
-           ▼                                    ▼
-┌─────────────────────┐              ┌─────────────────────┐
-│  Grafana MCP Server │              │   Jira MCP Server   │
-│  (StreamableHTTP)   │              │   (HTTP transport)  │
-│  Custom Docker image│              │   sooperset/mcp-    │
-└──────────┬──────────┘              │   atlassian         │
-           │                         └──────────┬──────────┘
-           ▼                                    │
-┌─────────────────────┐                         ▼
-│  Azure Managed      │              ┌─────────────────────┐
-│  Grafana + Loki     │              │  Jira Cloud         │
-└──────────┬──────────┘              │  aq-r2d2.atlassian  │
-           │                         └─────────────────────┘
-           ▼
-┌─────────────────────┐
-│  Grocery API        │  ◀── Demo app that generates 429 errors
-│  (Container App)    │
-└─────────────────────┘
+
+### AKS private VNet test bed (validates SRE Agent + private AKS pattern)
+
+```mermaid
+graph TD
+    Agent2["🤖 Azure SRE Agent\naq-main\nManaged Identity"] -->|ARM / Azure CLI| ARM["Azure Resource Manager\npublic endpoint"]
+
+    ARM -->|Private Link / Azure backbone| AKS["AKS Cluster\nPrivate API Server\nno public endpoint"]
+    ARM -->|Log Analytics API| LA["Log Analytics Workspace\nContainer Insights tables:\nKubePodInventory\nContainerLog / Perf"]
+    ARM -->|az aks command invoke| Kubectl["kubectl\ntunneled through ARM\nno VPN needed"]
+
+    Kubectl --> AKS
+    AKS --> Nodes["AKS Nodes\nsnet-aks 10.42.0.0/22\nAzure CNI Overlay"]
+    Nodes --> GroceryAKS["grocery-api\n2 replicas + HPA"]
+
+    subgraph VNet ["Private VNet 10.42.0.0/16"]
+        AKS
+        Nodes
+        GroceryAKS
+    end
 ```
 
 ---
@@ -150,6 +163,6 @@ curl -X POST "https://ca-api-ps64h2ydsavgc.icymeadow-96da5d2b.eastus2.azureconta
 
 ---
 
-**Version:** 2.0  
-**Last Updated:** January 29, 2026  
+**Version:** 3.0  
+**Last Updated:** March 30, 2026  
 **Author:** Arturo Quiroga
