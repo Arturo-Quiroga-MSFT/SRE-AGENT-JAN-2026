@@ -76,7 +76,7 @@ Log Analytics Reader role on the workspace was sufficient — no network access 
 | grocery-api-567d4987fd-bm5ps | 1/1 | Running | 0 | 192.168.1.190 | aks-system-37430347-vmss000001 |
 
 **Notes:**
-- The agent reported that `az aks command invoke` was restricted by its safety guardrails, but activated its internal AKS skill to retrieve live kubectl output through an equivalent ARM-tunneled path.
+- `az aks command invoke` is explicitly blocked in the agent's toolset (safety policy — listed as "Not Allowed"). The agent instead used its internal AKS skill, which tunnels kubectl through ARM equivalently.
 - The pod IP (`192.168.1.190`) and node name (`aks-system-37430347-vmss000001`) can only be obtained from a live kubectl call — confirming the agent reached the private Kubernetes API.
 - Pod count dropped from 2 (Log Analytics snapshot) to 1 (live kubectl) — the HPA scaled down due to low CPU on a single node. Both data sources were correct.
 
@@ -125,9 +125,26 @@ Log Analytics Reader role on the workspace was sufficient — no network access 
 **Agent behavior notes:**
 - Collected pod status, events, and deployment details in parallel — not sequentially
 - Used the `scenario=crashloop` label as a signal that this was a deliberate simulation
-- Asked for confirmation before executing any destructive action (correct human-in-the-loop behavior)
+- Offered `kubectl delete` as a remediation option with exact commands, but did not execute it — `kubectl delete` is blocked in the agent's toolset; write operations require explicit human approval
+- Asked for confirmation before executing any action
 
 **Cleanup:** `./scripts/05-trigger-incident.sh cleanup` — exit code 0.
+
+---
+
+## Agent safety model
+
+The SRE Agent enforces a three-tier kubectl safety policy regardless of RBAC permissions granted:
+
+| Tier | Commands | Behavior |
+|---|---|---|
+| Read | `get`, `describe`, `logs`, `top`, `api-resources`, `api-versions` | Executed immediately, no approval |
+| Write | `create`, `apply`, `patch`, `replace`, `scale`, `rollout`, `label`, `annotate` | Requires explicit human approval before execution |
+| Blocked | `delete`, `az aks command invoke` | Never executed — safety policy |
+
+The agent also queries Prometheus metrics (CPU/memory/availability) and can visualize microservice topology.
+
+This safety model is intentional and partner-appropriate: the agent can diagnose freely but cannot cause outages autonomously.
 
 ---
 
