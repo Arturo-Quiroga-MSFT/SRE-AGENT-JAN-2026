@@ -75,36 +75,72 @@ AKS_NAME=$(azd env get-values | grep ^AKS_CLUSTER_NAME     | cut -d= -f2 | tr -d
 
 mkdir -p "${TMP_DIR}"
 
-# ── Helper: invoke kubectl against private cluster ────────────────────────────
+# ── Helper: parse az aks command invoke JSON output ──────────────────────────
+# az aks command invoke intermittently returns non-JSON ("Operation returned
+# an invalid status 'OK'") even with --output json. This python helper
+# tolerates that and returns exit code 2 so the caller can retry.
+_parse_invoke_output() {
+  python3 -c "
+import sys, json
+raw = sys.stdin.read()
+try:
+    r = json.loads(raw)
+except Exception:
+    sys.stderr.write('WARN: non-JSON response from az aks command invoke, will retry\n')
+    sys.exit(2)
+print(r.get('logs', ''))
+code = r.get('exitCode', 0)
+sys.exit(code)
+"
+}
+
+# ── Helper: invoke kubectl against private cluster (with auto-retry) ──────────
 invoke() {
   local cmd="$1"
   local file="$2"
-  az aks command invoke \
-    --resource-group "${RG}" \
-    --name "${AKS_NAME}" \
-    --command "${cmd}" \
-    --file "${file}" \
-    --output json | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-print(r.get('logs', ''))
-code = r.get('exitCode', 0)
-if code != 0:
-    sys.exit(code)
-"
+  local attempt=1
+  local max=3
+  while [ $attempt -le $max ]; do
+    if az aks command invoke \
+        --resource-group "${RG}" \
+        --name "${AKS_NAME}" \
+        --command "${cmd}" \
+        --file "${file}" \
+        --output json 2>/dev/null | _parse_invoke_output; then
+      return 0
+    fi
+    local rc=$?
+    if [ $rc -eq 2 ] && [ $attempt -lt $max ]; then
+      warn "Retrying command invoke (attempt $attempt/$max) in 5s..."
+      sleep 5
+    else
+      fail "Command invoke failed (exit $rc) after $attempt attempt(s): ${cmd}"
+    fi
+    attempt=$((attempt + 1))
+  done
 }
 
 invoke_nofile() {
   local cmd="$1"
-  az aks command invoke \
-    --resource-group "${RG}" \
-    --name "${AKS_NAME}" \
-    --command "${cmd}" \
-    --output json | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-print(r.get('logs', ''))
-"
+  local attempt=1
+  local max=3
+  while [ $attempt -le $max ]; do
+    if az aks command invoke \
+        --resource-group "${RG}" \
+        --name "${AKS_NAME}" \
+        --command "${cmd}" \
+        --output json 2>/dev/null | _parse_invoke_output; then
+      return 0
+    fi
+    local rc=$?
+    if [ $rc -eq 2 ] && [ $attempt -lt $max ]; then
+      warn "Retrying command invoke (attempt $attempt/$max) in 5s..."
+      sleep 5
+    else
+      fail "Command invoke failed (exit $rc) after $attempt attempt(s): ${cmd}"
+    fi
+    attempt=$((attempt + 1))
+  done
 }
 
 # ── deploy one scenario ───────────────────────────────────────────────────────
