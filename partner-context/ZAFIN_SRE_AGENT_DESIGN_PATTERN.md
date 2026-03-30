@@ -21,48 +21,34 @@ private VNET" — is incorrect and can be removed from architectural decision re
 
 ## Architecture overview
 
-```
-                    Zafin SRE Team
-                         |
-                   (browser / chat)
-                         |
-                         v
-              ┌─────────────────────┐
-              │  Azure SRE Agent    │
-              │  (AI Foundry)       │
-              │  Managed Identity   │
-              └────────┬────────────┘
-                       |
-          authenticates via Managed Identity
-                       |
-                       v
-          ┌────────────────────────┐
-          │  Azure Resource Manager│  <-- always publicly reachable
-          │  (control plane)       │
-          └──────┬──────┬──────────┘
-                 |      |
-        ARM API  |      | Log Analytics API
-                 |      |
-    ┌────────────v──┐  ┌v─────────────────────────┐
-    │ AKS API Server│  │ Log Analytics Workspace   │
-    │ Private, no   │  │ KubePodInventory          │
-    │ public endpoint│  │ ContainerLog              │
-    └───────┬───────┘  │ KubeEvents                │
-            |          │ Perf                      │
-   ARM tunnel|          │ AppInsights tables        │
-   (kubectl) |          └───────────────────────────┘
-            |
-    ┌───────v───────────────────────┐
-    │  Private VNet                 │
-    │  ┌─────────────────────────┐  │
-    │  │  AKS Node Pool          │  │
-    │  │  Zafin workloads        │  │
-    │  │  (namespaced by client) │  │
-    │  └─────────────────────────┘  │
-    └───────────────────────────────┘
+```mermaid
+graph TD
+    User["Zafin SRE Team\nbrowser / chat"]
+    Agent["Azure SRE Agent\nAI Foundry\nManaged Identity"]
+    ARM["Azure Resource Manager\npublic endpoint — always reachable"]
+    LA["Log Analytics Workspace\nKubePodInventory\nContainerLog\nKubeEvents / Perf\nApp Insights tables"]
+    AKS["AKS API Server\nprivate — no public endpoint"]
+    Kubectl["kubectl\ntunneled through ARM\nno VPN needed"]
 
-The SRE Agent never enters the VNet.
+    User -->|chat prompt| Agent
+    Agent -->|Managed Identity auth| ARM
+    ARM -->|ARM API — cluster mgmt| AKS
+    ARM -->|Log Analytics REST API| LA
+    ARM -->|az aks command invoke| Kubectl
+    Kubectl --> AKS
+
+    subgraph VNet ["Private VNet"]
+        AKS
+        Nodes["AKS Node Pool\nZafin workloads\nnamespaced by client"]
+        AKS --> Nodes
+    end
+
+    style Agent fill:#0078d4,color:#fff
+    style ARM fill:#e8f4fd,color:#000
+    style VNet fill:#f0f0f0,color:#000
 ```
+
+> The SRE Agent never enters the VNet. All paths go through Azure's public control plane.
 
 ---
 
