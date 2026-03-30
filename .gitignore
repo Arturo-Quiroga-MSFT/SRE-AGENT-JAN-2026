@@ -82,3 +82,6 @@ NOTES.md
 TODO.md
 *.draft.md
 GHCP-HISTORY-29-JAN-2026.md
+# Large binary files - use shared drive instead
+*.pptx
+*.PPTX
