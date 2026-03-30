@@ -1,0 +1,100 @@
+---
+# grocery Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grocery
+  labels:
+    app.kubernetes.io/part-of: grocery-sre-demo
+---
+# grocery-api Deployment
+# Image is built from ../grocery-sre-demo/src/api and pushed to ACR by deploy.sh.
+# The ACR_LOGIN_SERVER placeholder is replaced by deploy.sh before invoking.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grocery-api
+  namespace: grocery
+  labels:
+    app: grocery-api
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grocery-api
+  template:
+    metadata:
+      labels:
+        app: grocery-api
+        version: v1
+    spec:
+      containers:
+        - name: api
+          image: ACR_LOGIN_SERVER/grocery-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3100
+              name: http
+          env:
+            - name: PORT
+              value: "3100"
+            - name: SUPPLIER_RATE_LIMIT
+              value: "5"   # Low limit to make 429s easy to trigger
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3100
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3100
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+# grocery-api Service (ClusterIP — internal only, matching private VNet posture)
+apiVersion: v1
+kind: Service
+metadata:
+  name: grocery-api
+  namespace: grocery
+  labels:
+    app: grocery-api
+spec:
+  selector:
+    app: grocery-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3100
+  type: ClusterIP
+---
+# HorizontalPodAutoscaler — lets you test scale-up/scale-down via SRE Agent
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grocery-api-hpa
+  namespace: grocery
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grocery-api
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

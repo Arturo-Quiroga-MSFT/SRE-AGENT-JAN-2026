@@ -1,0 +1,10 @@
+{
+  "resourcesResourceGroups": "rg-",
+  "managedClusters": "aks-",
+  "containerRegistries": "acr",
+  "logAnalyticsWorkspaces": "log-",
+  "managedIdentities": "id-",
+  "virtualNetworks": "vnet-",
+  "networkSecurityGroups": "nsg-",
+  "managedGrafana": "amg-"
+}

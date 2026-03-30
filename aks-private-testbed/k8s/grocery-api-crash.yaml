@@ -1,0 +1,41 @@
+---
+# grocery-api-crash Deployment
+# Deploy this to intentionally trigger the CrashLoopBackOff alert.
+# The SRE Agent should detect the restart count spike and investigate.
+#
+# Usage (via az aks command invoke):
+#   kubectl apply -f /mnt/grocery-api-crash.yaml
+#   # Wait ~5 min for the alert to fire
+#   kubectl delete -f /mnt/grocery-api-crash.yaml   # cleanup
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grocery-api-crash
+  namespace: grocery
+  labels:
+    app: grocery-api-crash
+    scenario: crashloop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grocery-api-crash
+  template:
+    metadata:
+      labels:
+        app: grocery-api-crash
+        scenario: crashloop
+    spec:
+      containers:
+        - name: crasher
+          # Uses a shell command that exits immediately, causing CrashLoopBackOff
+          image: busybox:1.36
+          command: ["/bin/sh", "-c", "echo 'Simulated crash'; sleep 5; exit 1"]
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+            limits:
+              cpu: "50m"
+              memory: "32Mi"

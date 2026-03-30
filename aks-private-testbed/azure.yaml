@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: aks-private-testbed
+metadata:
+  template: aks-private-testbed@0.0.1
+
+# No azd-managed services — the grocery-api is deployed to AKS
+# via az aks command invoke in scripts/deploy.sh after azd provision.
+# This keeps the testbed infrastructure-only from azd's perspective.
