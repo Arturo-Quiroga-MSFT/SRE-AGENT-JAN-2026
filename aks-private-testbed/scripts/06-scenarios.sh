@@ -186,15 +186,16 @@ if [[ -z "$TARGET" ]]; then
   exit 1
 fi
 
-KEYS=()
+# Build a space-separated list of keys to process (no arrays — bash 3.2 safe)
 if [[ "$TARGET" == "all" ]]; then
-  KEYS=(a b c d)
+  KEYS="a b c d"
 else
-  KEYS=("$TARGET")
+  # Validate single key by calling scenario_file (it calls fail on unknown key)
+  scenario_file "$TARGET" > /dev/null
+  KEYS="$TARGET"
 fi
 
-for k in "${KEYS[@]}"; do
-  [[ -z "${SCENARIO_FILE[$k]+_}" ]] && fail "Unknown scenario '${k}'. Valid: a b c d all"
+for k in $KEYS; do
   if [[ "$ACTION" == "deploy" ]]; then
     deploy_scenario "$k"
   elif [[ "$ACTION" == "cleanup" ]]; then
