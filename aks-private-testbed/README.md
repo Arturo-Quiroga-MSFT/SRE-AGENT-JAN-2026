@@ -28,63 +28,50 @@ This test bed proves the pattern with real infrastructure.
 
 ## Architecture
 
-```
- ┌─────────────────────────────────────────────────────────────────┐
- │  Azure Subscription                                              │
- │                                                                  │
- │  ┌──────────────────────────────────────────────────────────┐   │
- │  │  Resource Group  rg-<env>                                │   │
- │  │                                                          │   │
- │  │  ┌────────────────────────────────────────────────────┐  │   │
- │  │  │  VNet  10.42.0.0/16                                │  │   │
- │  │  │                                                    │  │   │
- │  │  │  snet-aks  10.42.0.0/22   ┌──────────────────┐    │  │   │
- │  │  │  ───────────────────────► │   AKS Cluster    │    │  │   │
- │  │  │                           │  Private API      │    │  │   │
- │  │  │  snet-pe   10.42.8.0/27   │  Server (no       │    │  │   │
- │  │  │  (reserved for PE)        │  public endpoint) │    │  │   │
- │  │  │                           └────────┬─────────┘    │  │   │
- │  │  └────────────────────────────────────┼──────────────┘  │   │
- │  │                                       │ Private Link      │   │
- │  │  ┌────────────────────────────────────▼──────────────┐  │   │
- │  │  │         Azure Resource Manager (public)           │  │   │
- │  │  │  • Manages AKS through Azure backbone             │  │   │
- │  │  │  • az aks command invoke tunnels kubectl here     │  │   │
- │  │  │  • SRE Agent never needs to enter the VNet        │  │   │
- │  │  └──────────────┬─────────────────────┬─────────────┘  │   │
- │  │                 │                     │                  │   │
- │  │  ┌──────────────▼──────────┐   ┌──────▼──────┐          │   │
- │  │  │  Log Analytics          │   │     ACR     │          │   │
- │  │  │  Container Insights:    │   │   (Basic)   │          │   │
- │  │  │  KubePodInventory       │   │             │          │   │
- │  │  │  KubeNodeInventory      │   └─────────────┘          │   │
- │  │  │  ContainerLog / Perf    │                             │   │
- │  │  └─────────────────────────┘                             │   │
- │  └──────────────────────────────────────────────────────────┘   │
- │                                                                  │
- │  ┌─────────────────────┐                                        │
- │  │  SRE Agent          │  Managed Identity + ARM / Azure CLI    │
- │  │  (Azure AI Foundry) │ ──────────────────────────────────────►│
- │  └─────────────────────┘  Never enters the VNet                 │
- └─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Agent["SRE Agent\nAzure AI Foundry\nManaged Identity"]
+    ARM["Azure Resource Manager\npublic endpoint"]
+
+    subgraph RG["Resource Group rg-&lt;env&gt;"]
+        subgraph VNet["VNet 10.42.0.0/16"]
+            subgraph AKSSubnet["snet-aks 10.42.0.0/22"]
+                AKS["AKS Cluster\nPrivate API Server\nno public endpoint"]
+            end
+            PE["snet-pe 10.42.8.0/27\nreserved for PE"]
+        end
+        LA["Log Analytics Workspace\nContainer Insights\nKubePodInventory / KubeNodeInventory\nContainerLog / Perf"]
+        ACR["ACR\nBasic"]
+    end
+
+    Agent -->|"Managed Identity auth\nNever enters the VNet"| ARM
+    ARM -->|"ARM API — cluster mgmt\nAzure backbone"| AKS
+    ARM -->|"Log Analytics REST API"| LA
+    ARM -->|"az aks command invoke\ntunnels kubectl through ARM"| AKS
+    AKS -.->|"Private Link"| ARM
+
+    style Agent fill:#0078d4,color:#fff
+    style ARM fill:#e8f4fd,color:#000
+    style RG fill:#f9f9f9,color:#000
+    style VNet fill:#e8f0fe,color:#000
+    style AKSSubnet fill:#d4e8ff,color:#000
 ```
 
 ### How the SRE Agent reaches a private AKS cluster
 
-```
-SRE Agent (AI Foundry)
-    │
-    │  authenticates with Managed Identity
-    ▼
-Azure Resource Manager  ◄── always publicly reachable
-    │
-    │  ARM has built-in Private Link path to AKS control plane
-    ▼
-AKS Private API Server  ◄── no public endpoint exposed
-    │
-    │  az aks command invoke tunnels kubectl through ARM
-    ▼
-Kubernetes API (in-cluster operations)
+```mermaid
+graph TD
+    A["SRE Agent\nAI Foundry"]
+    B["Azure Resource Manager\nalways publicly reachable"]
+    C["AKS Private API Server\nno public endpoint exposed"]
+    D["Kubernetes API\nin-cluster operations"]
+
+    A -->|"authenticates with Managed Identity"| B
+    B -->|"ARM built-in Private Link path\nto AKS control plane"| C
+    C -->|"az aks command invoke\ntunnels kubectl through ARM"| D
+
+    style A fill:#0078d4,color:#fff
+    style B fill:#e8f4fd,color:#000
 ```
 
 The SRE Agent never touches the VNet directly. It operates entirely through Azure's control plane.
