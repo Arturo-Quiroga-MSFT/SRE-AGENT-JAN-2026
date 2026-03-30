@@ -1,0 +1,70 @@
+---
+# Scenario D — Failing CronJob
+#
+# A CronJob that runs every 5 minutes and fails on ~50% of executions (odd minute → fail).
+# After 3 consecutive failures the Job hits BackoffLimitExceeded.
+# Kubernetes emits Warning events to KubeEvents, visible in Log Analytics.
+#
+# Signals produced:
+#   - KubePodInventory: completed/failed job pods accumulating
+#   - KubeEvents: Warning BackoffLimitExceeded events
+#   - ContainerLog: "SIMULATED FAILURE" / "SUCCESS" log lines
+#
+# SRE Agent prompt (use ~15 min after deploy, once failures have accumulated):
+#   "There are failed jobs in the grocery namespace. Investigate the failure
+#    pattern from logs and events, and recommend whether this is a transient
+#    or systemic issue."
+#
+# Deploy:   kubectl apply -f scenario-d-failing-cronjob.yaml
+# Cleanup:  kubectl delete -f scenario-d-failing-cronjob.yaml
+#           kubectl delete jobs -n grocery -l scenario=failing-cronjob
+#
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: data-sync-job
+  namespace: grocery
+  labels:
+    app: data-sync-job
+    scenario: failing-cronjob
+spec:
+  schedule: "*/5 * * * *"          # every 5 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2               # 3 attempts total; after 3 failures → BackoffLimitExceeded
+      template:
+        metadata:
+          labels:
+            app: data-sync-job
+            scenario: failing-cronjob
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: sync
+              image: busybox:1.36
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  MINUTE=$(date +%M | sed 's/^0*//')
+                  MINUTE=${MINUTE:-0}
+                  ODD=$((MINUTE % 2))
+                  if [ "$ODD" -eq 1 ]; then
+                    echo "SIMULATED FAILURE: data-sync could not reach upstream inventory API (connection timeout after 30s)"
+                    echo "Upstream endpoint: https://inventory.internal/api/v2/sync"
+                    echo "Retry attempt exhausted — marking job as failed"
+                    exit 1
+                  else
+                    echo "SUCCESS: data-sync completed — 1,482 records synchronized"
+                    exit 0
+                  fi
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "16Mi"
+                limits:
+                  cpu: "50m"
+                  memory: "32Mi"

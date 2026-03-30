@@ -1,0 +1,63 @@
+---
+# Scenario A — OOMKill Simulator
+#
+# A Python process that allocates memory in 10 MB chunks until it hits the 64 Mi
+# container limit. Kubernetes OOMKills it, then restarts it → repeat loop.
+#
+# Signals produced:
+#   - KubePodInventory:  PodRestartCount rising, LastState = OOMKilled
+#   - KubeNodeInventory: node memory pressure (visible if sustained)
+#   - Perf:              container memory working set approaching limit
+#
+# SRE Agent prompt (use after deploying):
+#   "A pod in the grocery namespace is getting OOMKilled repeatedly.
+#    Investigate memory usage, identify the container limit, and recommend a fix."
+#
+# Deploy:   kubectl apply -f scenario-a-oomkill.yaml
+# Cleanup:  kubectl delete -f scenario-a-oomkill.yaml
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oom-simulator
+  namespace: grocery
+  labels:
+    app: oom-simulator
+    scenario: oomkill
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oom-simulator
+  template:
+    metadata:
+      labels:
+        app: oom-simulator
+        scenario: oomkill
+    spec:
+      containers:
+        - name: oom-simulator
+          image: python:3.11-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              python3 -c "
+              import time, sys
+              print('OOM simulator starting - allocating memory in 10MB chunks', flush=True)
+              chunks = []
+              chunk_size = 10 * 1024 * 1024  # 10 MB
+              i = 0
+              while True:
+                  i += 1
+                  chunks.append(bytearray(chunk_size))
+                  print(f'Allocated chunk {i} ({i * 10} MB total)', flush=True)
+                  time.sleep(0.5)
+              "
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"   # tight limit — process will exceed this and get OOMKilled

@@ -1,0 +1,146 @@
+---
+# Scenario B — Flaky HTTP Service
+#
+# A lightweight Python Flask service that returns HTTP 500 on ~30% of requests.
+# A companion "load generator" pod calls it in a tight loop, filling ContainerLog
+# and the service's own logs with errors.
+#
+# Signals produced:
+#   - ContainerLog: HTTP 500 errors from both the service and the load generator
+#   - KubePodInventory: both pods Running (no crashes — purely errors in logs)
+#
+# SRE Agent prompt (use after deploying):
+#   "The flaky-service in the grocery namespace is generating errors.
+#    Investigate the error rate from logs and recommend remediation."
+#
+# Deploy:   kubectl apply -f scenario-b-flaky-service.yaml
+# Cleanup:  kubectl delete -f scenario-b-flaky-service.yaml
+#
+---
+# The flaky HTTP service — 500 on ~30% of requests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flaky-service
+  namespace: grocery
+  labels:
+    app: flaky-service
+    scenario: flaky-http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flaky-service
+  template:
+    metadata:
+      labels:
+        app: flaky-service
+        scenario: flaky-http
+    spec:
+      containers:
+        - name: flaky-service
+          image: python:3.11-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pip install flask --quiet && python3 -c "
+              import random, logging
+              from flask import Flask, jsonify
+              logging.basicConfig(level=logging.INFO)
+              app = Flask(__name__)
+
+              @app.route('/api/data')
+              def data():
+                  if random.random() < 0.30:
+                      app.logger.error('Internal server error: upstream dependency timeout')
+                      return jsonify({'error': 'upstream dependency timeout'}), 500
+                  return jsonify({'status': 'ok', 'data': 'grocery-inventory-v2'}), 200
+
+              @app.route('/health')
+              def health():
+                  return 'ok', 200
+
+              app.run(host='0.0.0.0', port=8080, debug=False)
+              "
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+# ClusterIP service so the load generator can call it by DNS name
+apiVersion: v1
+kind: Service
+metadata:
+  name: flaky-service
+  namespace: grocery
+  labels:
+    app: flaky-service
+spec:
+  selector:
+    app: flaky-service
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+# Load generator — calls flaky-service in a loop, logs success/error on each call
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+  namespace: grocery
+  labels:
+    app: load-generator
+    scenario: flaky-http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+        scenario: flaky-http
+    spec:
+      containers:
+        - name: load-generator
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Load generator starting — calling flaky-service every 2s"
+              i=0
+              while true; do
+                i=$((i + 1))
+                STATUS=$(wget -q -O /dev/null -S http://flaky-service/api/data 2>&1 | grep "HTTP/" | awk '{print $2}')
+                if [ "$STATUS" = "500" ]; then
+                  echo "[ERROR] Request $i: HTTP 500 — upstream dependency timeout"
+                elif [ "$STATUS" = "200" ]; then
+                  echo "[OK]    Request $i: HTTP 200"
+                else
+                  echo "[WARN]  Request $i: unexpected status '$STATUS'"
+                fi
+                sleep 2
+              done
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "16Mi"
+            limits:
+              cpu: "50m"
+              memory: "32Mi"

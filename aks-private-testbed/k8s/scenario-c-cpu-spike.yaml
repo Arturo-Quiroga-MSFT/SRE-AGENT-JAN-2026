@@ -1,0 +1,64 @@
+---
+# Scenario C — CPU Spike / HPA Trigger
+#
+# A pod that runs a CPU burn loop every 90 seconds (burns for 30s, rests for 60s).
+# On a single Standard_D2s_v3 node (2 vCPUs), sustained burn will:
+#   - Fire the "Node CPU > 80%" Azure Monitor metric alert
+#   - Drive the grocery-api HPA to scale out (if grocery-api is also running)
+#
+# Signals produced:
+#   - Azure Monitor: NodeCPUPercentage metric alert fires after 5 min sustained >80%
+#   - Perf (Container Insights): cpuUsageNanoCores spike visible in Log Analytics
+#   - KubePodInventory: grocery-api HPA scale-out event
+#
+# SRE Agent prompt (use after alert fires, ~5-10 min after deploy):
+#   "The Node CPU alert fired on aks-yiuooxpadbhno. Investigate which workload
+#    is responsible and recommend action."
+#
+# Deploy:   kubectl apply -f scenario-c-cpu-spike.yaml
+# Cleanup:  kubectl delete -f scenario-c-cpu-spike.yaml
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-burner
+  namespace: grocery
+  labels:
+    app: cpu-burner
+    scenario: cpu-spike
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-burner
+  template:
+    metadata:
+      labels:
+        app: cpu-burner
+        scenario: cpu-spike
+    spec:
+      containers:
+        - name: cpu-burner
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "CPU burner starting — 30s burn / 60s rest cycle"
+              cycle=0
+              while true; do
+                cycle=$((cycle + 1))
+                echo "Cycle $cycle: starting 30s CPU burn"
+                # Spin both sh processes to hit multi-core
+                end=$(($(date +%s) + 30))
+                while [ $(date +%s) -lt $end ]; do :; done
+                echo "Cycle $cycle: burn complete, resting 60s"
+                sleep 60
+              done
+          resources:
+            requests:
+              cpu: "900m"
+              memory: "32Mi"
+            limits:
+              cpu: "1800m"   # up to 1.8 vCPUs — enough to spike node CPU on Standard_D2s_v3
+              memory: "64Mi"
