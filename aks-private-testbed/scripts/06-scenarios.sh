@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# 06-scenarios.sh — Deploy / cleanup incident simulation scenarios A–D
+# 06-scenarios.sh — Deploy / cleanup incident simulation scenarios A-D
 #
 # Each scenario targets the private AKS cluster via az aks command invoke.
 # Manifests live in k8s/scenario-{a,b,c,d}-*.yaml
@@ -15,10 +15,10 @@
 #   ./scripts/06-scenarios.sh status             # show live pod/cronjob list
 #
 # Scenario summary:
-#   A — OOMKill simulator      (64 Mi limit, Python allocates past it)
-#   B — Flaky HTTP service     (30% HTTP 500, + load generator client)
-#   C — CPU spike              (1.8 vCPU burn loop, fires Node CPU alert)
-#   D — Failing CronJob        (every 5 min, fails on odd minutes)
+#   A - OOMKill simulator      (64 Mi limit, Python allocates past it)
+#   B - Flaky HTTP service     (30% HTTP 500, + load generator client)
+#   C - CPU spike              (1.8 vCPU burn loop, fires Node CPU alert)
+#   D - Failing CronJob        (every 5 min, fails on odd minutes)
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -31,26 +31,36 @@ log()  { echo -e "\033[1;34m[INFO]\033[0m  $*"; }
 ok()   { echo -e "\033[1;32m[OK]\033[0m    $*"; }
 warn() { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
 fail() { echo -e "\033[1;31m[FAIL]\033[0m  $*"; exit 1; }
-sep()  { echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; }
+sep()  { echo "------------------------------------------------------------------------"; }
 
-# ── Declare scenarios ─────────────────────────────────────────────────────────
-declare -A SCENARIO_FILE
-SCENARIO_FILE[a]="scenario-a-oomkill.yaml"
-SCENARIO_FILE[b]="scenario-b-flaky-service.yaml"
-SCENARIO_FILE[c]="scenario-c-cpu-spike.yaml"
-SCENARIO_FILE[d]="scenario-d-failing-cronjob.yaml"
+# ── Scenario metadata (bash 3.2 compatible — no associative arrays) ───────────
+scenario_file() {
+  case "$1" in
+    a) echo "scenario-a-oomkill.yaml" ;;
+    b) echo "scenario-b-flaky-service.yaml" ;;
+    c) echo "scenario-c-cpu-spike.yaml" ;;
+    d) echo "scenario-d-failing-cronjob.yaml" ;;
+    *) fail "Unknown scenario '$1'. Valid: a b c d all" ;;
+  esac
+}
 
-declare -A SCENARIO_DESC
-SCENARIO_DESC[a]="OOMKill simulator        — Python exceeds 64 Mi limit repeatedly"
-SCENARIO_DESC[b]="Flaky HTTP service       — 30% HTTP 500 + load generator"
-SCENARIO_DESC[c]="CPU spike                — 1.8 vCPU burn loop (fires Node CPU alert)"
-SCENARIO_DESC[d]="Failing CronJob          — every 5 min, fails ~50% of runs"
+scenario_desc() {
+  case "$1" in
+    a) echo "OOMKill simulator     - Python exceeds 64 Mi limit repeatedly" ;;
+    b) echo "Flaky HTTP service    - 30% HTTP 500 + load generator" ;;
+    c) echo "CPU spike             - 1.8 vCPU burn loop (fires Node CPU alert)" ;;
+    d) echo "Failing CronJob       - every 5 min, fails ~50% of runs" ;;
+  esac
+}
 
-declare -A SCENARIO_PROMPT
-SCENARIO_PROMPT[a]="A pod in the grocery namespace is getting OOMKilled repeatedly. Investigate memory usage, identify the container limit, and recommend a fix."
-SCENARIO_PROMPT[b]="The flaky-service in the grocery namespace is generating errors. Inspect container logs, calculate the error rate, and recommend remediation."
-SCENARIO_PROMPT[c]="The Node CPU alert fired on the AKS cluster. Investigate which workload is responsible, show resource usage trends, and recommend action."
-SCENARIO_PROMPT[d]="There are failed jobs in the grocery namespace. Investigate the failure pattern from logs and events, and recommend whether this is transient or systemic."
+scenario_prompt() {
+  case "$1" in
+    a) echo "A pod in the grocery namespace is getting OOMKilled repeatedly. Investigate memory usage, identify the container limit, and recommend a fix." ;;
+    b) echo "The flaky-service in the grocery namespace is generating errors. Inspect container logs, calculate the error rate, and recommend remediation." ;;
+    c) echo "The Node CPU alert fired on the AKS cluster. Investigate which workload is responsible, show resource usage trends, and recommend action." ;;
+    d) echo "There are failed jobs in the grocery namespace. Investigate the failure pattern from logs and events, and recommend whether this is transient or systemic." ;;
+  esac
+}
 
 # ── Read azd environment ──────────────────────────────────────────────────────
 command -v az &>/dev/null || fail "Azure CLI not found."
@@ -100,7 +110,8 @@ print(r.get('logs', ''))
 # ── deploy one scenario ───────────────────────────────────────────────────────
 deploy_scenario() {
   local key="$1"
-  local file="${SCENARIO_FILE[$key]}"
+  local file
+  file="$(scenario_file "$key")"
   local src="${K8S_DIR}/${file}"
   local tmp="${TMP_DIR}/${file}"
 
@@ -108,29 +119,31 @@ deploy_scenario() {
   cp "${src}" "${tmp}"
 
   sep
-  log "Deploying scenario ${key^^}: ${SCENARIO_DESC[$key]}"
+  log "Deploying scenario ${key}: $(scenario_desc "$key")"
   invoke "kubectl apply -f ${file}" "${tmp}"
-  ok "Scenario ${key^^} deployed."
+  ok "Scenario ${key} deployed."
   echo ""
   echo "  SRE Agent prompt:"
-  echo "  ┌─────────────────────────────────────────────────────────────────┐"
-  echo "  │ ${SCENARIO_PROMPT[$key]}"
-  echo "  └─────────────────────────────────────────────────────────────────┘"
+  echo "  $(scenario_prompt "$key")"
   echo ""
 }
 
 # ── cleanup one scenario ──────────────────────────────────────────────────────
 cleanup_scenario() {
   local key="$1"
-  local file="${SCENARIO_FILE[$key]}"
+  local file
+  file="$(scenario_file "$key")"
   local src="${K8S_DIR}/${file}"
   local tmp="${TMP_DIR}/${file}"
 
-  [[ ! -f "$src" ]] && warn "Manifest not found: ${src} — skipping"; return 0
+  if [[ ! -f "$src" ]]; then
+    warn "Manifest not found: ${src} -- skipping"
+    return 0
+  fi
   cp "${src}" "${tmp}"
 
   sep
-  log "Removing scenario ${key^^}: ${SCENARIO_DESC[$key]}"
+  log "Removing scenario ${key}: $(scenario_desc "$key")"
   invoke "kubectl delete -f ${file} --ignore-not-found" "${tmp}"
 
   # CronJob scenario: also purge leftover completed/failed job pods
@@ -138,7 +151,7 @@ cleanup_scenario() {
     invoke_nofile "kubectl delete jobs -n grocery -l scenario=failing-cronjob --ignore-not-found"
   fi
 
-  ok "Scenario ${key^^} removed."
+  ok "Scenario ${key} removed."
 }
 
 # ── status ────────────────────────────────────────────────────────────────────
