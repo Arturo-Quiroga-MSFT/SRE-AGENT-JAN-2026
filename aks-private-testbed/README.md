@@ -1,6 +1,6 @@
 # AKS Private VNet Test Bed — Azure SRE Agent
 
-> **Audience:** Partner Solution Architects, Zafin SRE team
+> **Audience:** Partner Solution Architects, SRE teams
 > **Status:** Deployed and validated — March 30, 2026
 > **Built by:** Arturo Quiroga (PSA, Microsoft)
 
@@ -10,7 +10,7 @@ This test bed provisions a real private AKS cluster and proves end-to-end that A
 
 ## Background and motivation
 
-Earlier project documentation (see [ZAFIN_CONTEXT.md](../partner-context/ZAFIN_CONTEXT.md)) stated:
+Earlier project documentation stated:
 
 > *"SRE Agent currently does not support AKS Cluster behind private VNET"*
 
@@ -338,11 +338,11 @@ Deletes the resource group and all contained resources. AKS cluster deletion tak
 
 ---
 
-## Relationship to Zafin
+## Applicability to production private AKS topologies
 
-This test bed directly mirrors Zafin's production topology and validates the design pattern they need:
+This test bed validates the pattern for any team running AKS in a private VNet:
 
-| Dimension | This test bed | Zafin production |
+| Dimension | This test bed | Production topology |
 |---|---|---|
 | Compute | AKS, private API server | AKS, private VNET |
 | Logs | Log Analytics (Container Insights) | Log Analytics (Container Insights) |
@@ -352,15 +352,15 @@ This test bed directly mirrors Zafin's production topology and validates the des
 | SRE Agent — kubectl ops | ✅ Validated via `az aks command invoke` | Same pattern applies |
 | SRE Agent — KQL queries | ✅ Validated via Log Analytics Reader role | Same pattern applies |
 
-Runbooks and KQL queries validated here transfer directly to the Zafin engagement.
+Runbooks and KQL queries validated here transfer directly to production deployments.
 
 ---
 
-## Next steps toward Zafin production
+## Next steps toward production
 
-1. **Replace `grocery` namespace** with Zafin's actual namespace structure and label conventions
-2. **Update KQL queries** in the SRE Agent knowledge file with Zafin-specific table schemas
+1. **Replace `grocery` namespace** with your actual namespace structure and label conventions
+2. **Update KQL queries** in the SRE Agent knowledge file with your table schemas
 3. **Add Application Insights** integration for app-level telemetry (not just infra)
 4. **Configure Azure Monitor alert → SRE Agent webhook** for automated incident ingestion
-5. **Document Zafin's dependency map** (upstream/downstream services) in the agent knowledge file
-6. **Enable Private Endpoints for ACR** if Zafin's security policy requires it (nodes would pull via PE instead of outbound LB)
+5. **Document your service dependency map** (upstream/downstream services) in the agent knowledge file
+6. **Enable Private Endpoints for ACR** if your security policy requires it (nodes would pull via PE instead of outbound LB)

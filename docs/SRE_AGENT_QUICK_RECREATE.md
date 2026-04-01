@@ -81,7 +81,7 @@ to Jira as the auth credential. Using `not-required` will cause silent
 auth failures when the agent tries to create tickets.
 
 ```text
-ATATT3xFfGF0di6KbEg091E1uEI4rWwukXPo26O_AUJHZp41VdSIIopUYmN8g-CDKXoxfeUVqNztlrP6Au2Gl7TTCA02LYNiDtxObar4JIkrpdknkwsITYuNXI4j7i09cAV4XE9-qbQjePo0txnWYjnoQfpcByJf_0ye5ImTZUyORbrmC-9sGiU=4D3ADC20
+<your-jira-api-token>   # generate at https://id.atlassian.com/manage/api-tokens
 ```
 
 Click **Validate connection** → green checkmark → **Save**.

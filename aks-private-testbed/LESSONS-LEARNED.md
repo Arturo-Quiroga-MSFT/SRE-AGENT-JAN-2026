@@ -4,7 +4,7 @@
 > **Author:** Arturo Quiroga (PSA, Microsoft)
 > **Context:** First-time deployment of the AKS Private VNet SRE Agent test bed
 
-This document captures every issue hit during the initial deployment, the root cause, and the fix applied. It exists so that fellow PSAs and Zafin engineers do not repeat the same debugging cycle.
+This document captures every issue hit during the initial deployment, the root cause, and the fix applied. It exists so that fellow PSAs and engineers do not repeat the same debugging cycle.
 
 ---
 
@@ -12,7 +12,7 @@ This document captures every issue hit during the initial deployment, the root c
 
 ### What we believed
 
-Our Zafin context document stated:
+Earlier project documentation stated:
 
 > *"SRE Agent currently does not support AKS Cluster behind private VNET"*
 
@@ -38,7 +38,7 @@ There are three distinct operations, with different network requirements:
 
 ### Impact on our docs
 
-Updated [ZAFIN_CONTEXT.md](../partner-context/ZAFIN_CONTEXT.md), [PROJECT_SUMMARY.md](../docs/PROJECT_SUMMARY.md), and [ZAFIN_GAP_ANALYSIS_MARCH_2026.md](../partner-context/ZAFIN_GAP_ANALYSIS_MARCH_2026.md) to remove the blanket limitation statement and replace with the correct nuanced picture.
+Updated project documentation to remove the blanket limitation statement and replace with the correct nuanced picture.
 
 ---
 

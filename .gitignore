@@ -85,3 +85,7 @@ GHCP-HISTORY-29-JAN-2026.md
 # Large binary files - use shared drive instead
 *.pptx
 *.PPTX
+
+# Partner-confidential content
+partner-context/
+meetings-recaps/Customer-Enablement-Automation-Roadmap_-Zafin-3-1.md
