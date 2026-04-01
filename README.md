@@ -2,7 +2,7 @@
 
 > **Attribution:** Based on [grocery-sre-demo](https://github.com/dm-chelupati/grocery-sre-demo) by **Deepthi Chelupati** (Microsoft).
 
-An end-to-end Proof of Concept demonstrating Azure SRE Agent integration with Grafana/Loki and Jira using MCP (Model Context Protocol).
+An end-to-end Proof of Concept demonstrating Azure SRE Agent integration with Grafana/Loki and Jira using MCP (Model Context Protocol). Also includes a validated test bed proving SRE Agent works with **fully private AKS clusters** (no public endpoint).
 
 ---
 
@@ -20,7 +20,6 @@ An end-to-end Proof of Concept demonstrating Azure SRE Agent integration with Gr
 SRE-AGENT-JAN-2026/
 │
 ├── README.md                              # This file
-├── .env.deployment                        # Environment variables (credentials)
 ├── Dockerfile.grafana-mcp-streamable      # Custom image for Grafana MCP (key fix!)
 │
 ├── docs/                                  # 📚 Documentation
@@ -31,9 +30,9 @@ SRE-AGENT-JAN-2026/
 │   ├── PHASE4_STATUS.md                   # MCP servers deployment status
 │   ├── PHASE5_ACTUAL_SETUP_GUIDE.md       # Azure SRE Agent portal workflow
 │   ├── PROJECT_SUMMARY.md                 # Project overview
+│   ├── SRE_AGENT_QUICK_RECREATE.md        # Quick recreation guide
 │   ├── BUG_REPORT_FOR_UPSTREAM.md         # Issues found for upstream repos
 │   ├── mcp-endpoints.txt                  # MCP server URLs (quick reference)
-│   ├── loki-config.txt                    # Loki configuration
 │   └── LINKS_OF_INTEREST.txt              # Useful external links
 │
 ├── scripts/                               # 🔧 Deployment Scripts
@@ -47,12 +46,10 @@ SRE-AGENT-JAN-2026/
 ├── aks-private-testbed/                   # 🔬 AKS Private VNet Test Bed
 │   ├── README.md                          # Full deployment guide
 │   ├── LESSONS-LEARNED.md                 # 8 documented quirks from deployment
+│   ├── TEST-RESULTS.md                    # Evidence: all 4 SRE Agent tests passed
 │   ├── infra/                             # Bicep: VNet, private AKS, ACR, alerts
-│   ├── k8s/                               # K8s manifests + crash simulator
-│   └── scripts/                           # 01-provision → 05-trigger-incident
-│
-├── partner-context/                       # 🏢 Partner-Specific Docs
-│   └── ZAFIN_CONTEXT.md                   # Zafin requirements & constraints
+│   ├── k8s/                               # K8s manifests + incident simulators
+│   └── scripts/                           # 01-provision → 06-scenarios
 │
 ├── grocery-sre-demo/                      # 🛒 Demo Application (submodule)
 │   ├── src/api/                           # Node.js API with rate limiting
@@ -60,12 +57,9 @@ SRE-AGENT-JAN-2026/
 │   ├── knowledge/loki-queries.md          # LogQL patterns for SRE Agent
 │   └── infra/                             # Bicep templates
 │
-├── scenarios/                             # 📋 Test Scenarios
-│   ├── rate-limit-incident.md             # Rate limiting scenario
-│   └── service-degradation.md             # Performance degradation scenario
-│
-└── docs_from_Deepthi Chelupati/           # 📄 Reference Materials
-    └── Blog8.docx                         # Original blog post
+└── scenarios/                             # 📋 Test Scenarios
+    ├── rate-limit-incident.md             # Rate limiting scenario
+    └── service-degradation.md             # Performance degradation scenario
 ```
 
 ---
@@ -73,13 +67,15 @@ SRE-AGENT-JAN-2026/
 ## 📖 Documentation Guide
 
 | If you want to... | Read this |
-|-------------------|-----------|
+|-------------------|----------|
 | **Understand the full setup & lessons learned** | [SETUP_FINDINGS_AND_LESSONS_LEARNED.md](docs/SETUP_FINDINGS_AND_LESSONS_LEARNED.md) ⭐ |
 | **Deploy from scratch** | [PARTNER_POC_GUIDE.md](docs/PARTNER_POC_GUIDE.md) |
+| **Recreate quickly** | [SRE_AGENT_QUICK_RECREATE.md](docs/SRE_AGENT_QUICK_RECREATE.md) |
 | **Track deployment progress** | [DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md) |
 | **Understand the Grafana MCP fix** | [Dockerfile.grafana-mcp-streamable](Dockerfile.grafana-mcp-streamable) |
 | **Get MCP server URLs** | [mcp-endpoints.txt](docs/mcp-endpoints.txt) |
 | **Deploy AKS private VNet test bed** | [aks-private-testbed/README.md](aks-private-testbed/README.md) |
+| **See SRE Agent test results on private AKS** | [aks-private-testbed/TEST-RESULTS.md](aks-private-testbed/TEST-RESULTS.md) |
 | **Understand SRE Agent + private AKS pattern** | [aks-private-testbed/LESSONS-LEARNED.md](aks-private-testbed/LESSONS-LEARNED.md) |
 
 ---
@@ -163,6 +159,6 @@ curl -X POST "https://ca-api-ps64h2ydsavgc.icymeadow-96da5d2b.eastus2.azureconta
 
 ---
 
-**Version:** 3.0  
-**Last Updated:** March 30, 2026  
-**Author:** Arturo Quiroga
+**Version:** 4.0  
+**Last Updated:** April 1, 2026  
+**Author:** Arturo Quiroga (Partner Solutions Architect, Microsoft)
