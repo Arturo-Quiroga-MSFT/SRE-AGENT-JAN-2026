@@ -1,4 +1,0 @@
-https://sre.azure.com/docs
-
-https://github.com/microsoft/sre-agent
-
