@@ -171,13 +171,49 @@ curl -X POST "https://$API_URL/api/demo/cpu-stress?duration=300"
 
 Circuit breaker auto-trips after sustained supplier failures. No explicit trigger needed.
 
-**Loki signature:**
+**Implementation:** Pure JS state machine in `src/api/index.js`.
+
+| Parameter | Value |
+|-----------|-------|
+| `CB_THRESHOLD` | 5 consecutive 429 failures |
+| `CB_TIMEOUT_MS` | 30 000 ms (30 s cool-down) |
+| States | `CLOSED` → `OPEN` → `HALF_OPEN` → `CLOSED` |
+| Prometheus metric | `grocery_circuit_breaker_state` gauge (0=CLOSED, 1=OPEN, 2=HALF_OPEN) |
+
+**Loki event codes:**
+
+| Event | Meaning |
+|-------|---------|
+| `circuit_breaker_opened` | CB tripped — 5 consecutive 429s |
+| `circuit_breaker_rejected` | Call blocked while CB is OPEN |
+| `circuit_breaker_half_open` | Cool-down expired, probe call allowed |
+| `circuit_breaker_probe_failed` | Probe 429'd, CB re-opens |
+| `circuit_breaker_closed` | Probe succeeded, CB back to CLOSED |
+| `circuit_breaker_manual_reset` | Manual demo reset via API |
+
+**Loki signatures:**
 ```logql
+# Detect CB open
+{app="grocery-api"} | json | event="circuit_breaker_opened"
+
+# Any CB activity
+{app="grocery-api"} | json | event=~"circuit_breaker_.*"
+
+# Calls being blocked
 {app="grocery-api"} | json | errorCode="CIRCUIT_OPEN"
 ```
 
-**Recovery:** Circuit breaker auto-resets after the cool-down window. Do not intervene
-unless it has not reset after 5+ minutes.
+**Check real-time CB state:**
+```bash
+curl https://ca-api-ps64h2ydsavgc.icymeadow-96da5d2b.eastus2.azurecontainerapps.io/api/supplier/status
+# Returns: { "circuitBreaker": { "state": "OPEN|CLOSED|HALF_OPEN", "failureCount": N, ... } }
+```
+
+**Recovery:** Circuit breaker auto-resets after the 30 s cool-down (HALF_OPEN probe). Do not intervene
+unless it has not reset after 5+ minutes. For demo resets use:
+```bash
+curl -X POST https://ca-api-ps64h2ydsavgc.icymeadow-96da5d2b.eastus2.azurecontainerapps.io/api/demo/reset-circuit-breaker
+```
 
 ---
 
