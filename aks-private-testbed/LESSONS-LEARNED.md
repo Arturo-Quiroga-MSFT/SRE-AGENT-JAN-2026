@@ -242,7 +242,20 @@ The default table output format of `az aks command invoke` has a rendering bug i
 
 ### Fix
 
-Always use `--output json` and parse the response with Python:
+**Option A — `-o yaml` (preferred as of `aks-preview 19.0.0b22`):**
+
+With `aks-preview ≥ 19.0.0b22`, both `-o json` and `-o table` fail with the same
+`Operation returned an invalid status 'OK'` error before producing output. Use
+`-o yaml` instead, which renders correctly:
+
+```bash
+az aks command invoke \
+  -g "${RG}" -n "${AKS_NAME}" \
+  -c "kubectl get pods -n grocery -o wide" \
+  -o yaml 2>/dev/null
+```
+
+**Option B — `-o json` with Python parsing (older CLI versions):**
 
 ```bash
 az aks command invoke \
@@ -252,10 +265,12 @@ az aks command invoke \
   --output json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r['logs']); sys.exit(r['exitCode'])"
 ```
 
-The JSON response always contains:
+The JSON/YAML response always contains:
 - `logs` — full stdout from the command
 - `exitCode` — the actual exit code from inside the pod
 - `provisioningState` — `Succeeded` when the invoke itself worked
+
+**Option C — `-o none` for fire-and-forget:** exits 0 with no output.
 
 ---
 
