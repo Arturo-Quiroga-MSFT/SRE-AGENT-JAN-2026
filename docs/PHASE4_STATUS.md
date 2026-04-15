@@ -42,7 +42,7 @@ GRAFANA_TOKEN=glsa_SkH1KcoKzOHFfMc8hJRGqZ8Ay36bE7ao_f5fadede
 # Jira Credentials (Ready for whatever approach we choose)
 JIRA_URL=https://aq-r2d2.atlassian.net
 JIRA_EMAIL=arturoqu@microsoft.com
-JIRA_API_TOKEN=ATATT3xFfGF0di6KbEg091E1uEI4rWwukXPo26O_AUJHZp41VdSIIopUYmN8g-CDKXoxfeUVqNztlrP6Au2Gl7TTCA02LYNiDtxObar4JIkrpdknkwsITYuNXI4j7i09cAV4XE9-qbQjePo0txnWYjnoQfpcByJf_0ye5ImTZUyORbrmC-9sGiU=4D3ADC20
+JIRA_API_TOKEN=<put token here>
 ```
 
 ## Summary
