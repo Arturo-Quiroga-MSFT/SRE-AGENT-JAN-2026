@@ -1,0 +1,10 @@
+{
+  "resourcesResourceGroups": "rg-",
+  "containerAppsEnvironments": "cae-",
+  "containerApps": "ca-",
+  "containerRegistries": "acr",
+  "logAnalyticsWorkspaces": "log-",
+  "managedIdentities": "id-",
+  "virtualNetworks": "vnet-",
+  "networkSecurityGroups": "nsg-"
+}
