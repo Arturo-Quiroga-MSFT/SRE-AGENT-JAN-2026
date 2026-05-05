@@ -1,6 +1,6 @@
 """Build a 10-minute talk deck on the Zafin engagement.
 
-Output: partner-context/ZAFIN_10MIN_TALK_APR2026.pptx
+Output: partner-context/ZAFIN_10MIN_TALK_APR-MAY2026.pptx
 
 Run:  python scripts/build_zafin_talk_deck.py
 """
@@ -24,7 +24,7 @@ LIGHT_BG = RGBColor(0xF3, 0xF7, 0xFB)
 OUT_PATH = (
     Path(__file__).resolve().parent.parent
     / "partner-context"
-    / "ZAFIN_10MIN_TALK_APR2026.pptx"
+    / "ZAFIN_10MIN_TALK_APR-MAY2026.pptx"
 )
 
 
@@ -134,7 +134,7 @@ prs = Presentation()
 prs.slide_width = Inches(13.333)
 prs.slide_height = Inches(7.5)
 
-TOTAL = 6
+TOTAL = 7
 
 # === Slide 1: Title =======================================================
 s = add_blank(prs)
@@ -401,7 +401,67 @@ add_notes(
     "debug cycle.",
 )
 
-# === Slide 6: What's next + close ========================================
+# === Slide 6: May 2026 — PIM Enablement validated ========================
+s = add_blank(prs)
+add_header_bar(s, "May 2026  \u2014  PIM Enablement validated end-to-end",
+               "Hybrid Enterprise MCP + custom gap-filler `pim-mcp` working in `MngEnvMCAP094150`")
+
+# Quick story strip
+q = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(1.7), Inches(12.3), Inches(1.4))
+q.fill.solid(); q.fill.fore_color.rgb = LIGHT_BG
+q.line.color.rgb = AZURE_BLUE; q.line.width = Pt(1.5)
+add_text(s, "The story", 0.8, 1.85, 4.0, 0.4, size=12, bold=True, color=SUBTLE)
+add_text(
+    s,
+    "Microsoft shipped the Enterprise MCP Server (preview) covering ~90% of PIM Graph reads. "
+    "One critical endpoint \u2014 the one exposing pending PIM activation requests \u2014 is unreachable through it. "
+    "We built a single-tool gap-filler MCP server in Container Apps with Managed Identity and proved the full chain works.",
+    0.8, 2.25, 11.8, 0.85, size=14,
+)
+
+# Two-column: what works / bugs found
+add_text(s, "What works today", 0.5, 3.3, 6.0, 0.4, size=15, bold=True, color=ACCENT_GREEN)
+g = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(3.75), Inches(6.0), Inches(2.9))
+g.fill.solid(); g.fill.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+g.line.color.rgb = ACCENT_GREEN; g.line.width = Pt(1.5)
+add_bullets(s, [
+    "`pim-mcp` Container App live (image 0.2.4)",
+    "SSE \u2192 FastMCP \u2192 MI \u2192 Graph \u2192 HTTP 200",
+    "`list_pending_pim_requests` returns normalized JSON",
+    "Three reproducible PowerShell scripts (assign / configure / trigger)",
+    "Step-by-step REPRODUCE.md for Zafin to run in their tenant",
+], 0.7, 3.9, 5.6, 2.7, size=13)
+
+add_text(s, "Upstream bugs uncovered", 6.8, 3.3, 6.0, 0.4, size=15, bold=True, color=ACCENT_AMBER)
+a = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(6.8), Inches(3.75), Inches(6.0), Inches(2.9))
+a.fill.solid(); a.fill.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+a.line.color.rgb = ACCENT_AMBER; a.line.width = Pt(1.5)
+add_bullets(s, [
+    "BUG-001: Graph runtime requires `*.ReadWrite.Directory` for read-only LIST (docs say Read.Directory works)",
+    "BUG-002: Graph rejects $filter, $orderby AND $expand on this collection",
+    "BUG-003: Enterprise MCP only mirrors `MCP.*Read.*` scopes \u2014 cannot satisfy BUG-001",
+    "App-role propagation lag of 5\u201360+ minutes after grant",
+], 7.0, 3.9, 5.6, 2.7, size=12)
+
+# Bottom takeaway pill
+tk = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(6.75), Inches(12.3), Inches(0.45))
+tk.fill.solid(); tk.fill.fore_color.rgb = AZURE_BLUE; tk.line.fill.background()
+add_text(
+    s,
+    "Same pattern as the AKS work: meet the customer where they are, document the bugs we hit, ship a defensible path forward.",
+    0.7, 6.83, 11.9, 0.4, size=13, bold=True, color=RGBColor(0xFF, 0xFF, 0xFF),
+)
+add_footer(s, 6, TOTAL)
+add_notes(
+    s,
+    "This slide is the May update on top of the April story. The Zafin PIM Enablement use "
+    "case is now validated end-to-end in our test tenant. We picked up three real upstream "
+    "bugs in the process and documented them in UPSTREAM_BUGS.md so when Zafin runs the same "
+    "flow they don't re-hit the same walls. Same playbook as the AKS work \u2014 prove it, document it, "
+    "ship it.",
+)
+
+# === Slide 7: What's next + close ========================================
 s = add_blank(prs)
 add_header_bar(s, "What's next + adjacent value", "May 2026 →")
 
@@ -454,7 +514,7 @@ add_text(
     bold=True,
     color=RGBColor(0xFF, 0xFF, 0xFF),
 )
-add_footer(s, 6, TOTAL)
+add_footer(s, 7, TOTAL)
 add_notes(
     s,
     "Two threads going forward. Zafin: I keep the P1 ticket-enrichment + Grafana "

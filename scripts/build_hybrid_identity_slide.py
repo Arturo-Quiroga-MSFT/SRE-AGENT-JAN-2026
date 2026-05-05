@@ -208,10 +208,22 @@ for i, (uc, model, why, color) in enumerate(mapping):
     add_text(s, model, x, yb + 0.7, col_w, 0.25, size=11, bold=True, color=color)
     add_text(s, why, x, yb + 0.92, col_w, 0.35, size=10, color=SUBTLE)
 
+# May 5 update strip (above footer)
+yu = 6.78
+upd = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(yu), Inches(12.3), Inches(0.32))
+upd.fill.solid(); upd.fill.fore_color.rgb = LIGHT_BG
+upd.line.color.rgb = AMBER; upd.line.width = Pt(1.0)
+add_text(
+    s,
+    "Update 2026-05-05  \u00b7  PIM Enablement gap-filler MI now also holds RoleAssignmentSchedule.ReadWrite.Directory at runtime "
+    "(Graph BUG-001 workaround). Latent only \u2014 server registers no write tool. See pim-enablement-testbed/docs/UPSTREAM_BUGS.md.",
+    0.7, yu + 0.04, 11.9, 0.28, size=9, color=DARK_TEXT,
+)
+
 # Footer
 add_text(
     s,
-    "Arturo Quiroga  ·  PSA  ·  Zafin internal alignment  ·  May 1, 2026",
+    "Arturo Quiroga  \u00b7  PSA  \u00b7  Zafin internal alignment  \u00b7  May 1, 2026  \u00b7  rev May 5",
     0.5, 7.18, 12.5, 0.25, size=9, color=SUBTLE,
 )
 

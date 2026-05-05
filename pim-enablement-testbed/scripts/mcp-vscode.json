@@ -1,0 +1,18 @@
+// Drop-in mcp.json snippet for the FASTEST interactive test.
+// Copy into your VS Code user settings or workspace .vscode/mcp.json,
+// then open Copilot Chat and ask: "list pending PIM activation requests".
+//
+// Prereqs:
+//   pwsh -Command "Install-Module Microsoft.Entra.Beta -Force -AllowClobber"
+//   pwsh -Command "Connect-Entra -Scopes 'Application.ReadWrite.All','DelegatedPermissionGrant.ReadWrite.All'"
+//   pwsh -Command "Grant-EntraBetaMCPServerPermission -ApplicationName VisualStudioCode"
+//
+// On first use VS Code will prompt you to sign in to your tenant.
+{
+  "servers": {
+    "microsoft-enterprise": {
+      "type": "http",
+      "url": "https://mcp.svc.cloud.microsoft/enterprise"
+    }
+  }
+}

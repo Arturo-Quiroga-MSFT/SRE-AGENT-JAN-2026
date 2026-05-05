@@ -1,0 +1,15 @@
+name: pim-enablement-testbed
+metadata:
+  template: pim-enablement-testbed@0.2.0
+  # 0.2.0 (May 4 2026): pivoted to Microsoft MCP Server for Enterprise.
+  # Custom pim-mcp Container App removed from the deploy graph; retained
+  # on disk under mcp-servers/pim-mcp/ as a fallback only.
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+# No services to deploy. The Enterprise MCP server is Microsoft-hosted at
+# https://mcp.svc.cloud.microsoft/enterprise. The Foundry SRE agent is
+# configured separately via the Foundry portal (see docs/deployment-runbook.md).

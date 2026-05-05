@@ -1,0 +1,95 @@
+# PIM Enablement — Validation Rules
+#
+# PLACEHOLDER content. Zafin owns the real rule table (ask D1).
+# Engine semantics (we own this part):
+#   - Rules are evaluated in order.
+#   - Each rule has: id, description, kind (hard|soft), terminal (bool),
+#     and a typed predicate.
+#   - "hard" failure -> verdict NOT ELIGIBLE.
+#   - "soft" failure -> verdict ELIGIBLE with reduced confidence.
+#   - "terminal: true" stops further evaluation on failure.
+#
+# Predicates supported in V1:
+#   - ticket_state_in: list[str]
+#   - ticket_age_max_hours: int
+#   - requester_assignee_match: bool
+#   - group_membership_any: list[str]   # group object IDs
+#   - role_in_allowlist: list[str]      # role definition IDs or display names
+#   - scope_prefix_in_allowlist: list[str]
+#   - activation_duration_max_hours: int
+#   - recent_activations_max: { window_hours: int, count: int }
+
+version: 1
+rules:
+  - id: R001-ticket-exists
+    description: Linked Jira ticket must exist and be readable.
+    kind: hard
+    terminal: true
+    predicate:
+      type: ticket_state_in
+      values: ["Open", "In Progress", "In Review", "Investigating"]
+
+  - id: R002-ticket-recent
+    description: Linked ticket must be opened within the last 72 hours.
+    kind: hard
+    terminal: false
+    predicate:
+      type: ticket_age_max_hours
+      value: 72
+
+  - id: R003-requester-assignee
+    description: Requester must be the assignee of the linked ticket.
+    kind: hard
+    terminal: false
+    predicate:
+      type: requester_assignee_match
+      value: true
+
+  - id: R004-group-membership
+    description: Requester must belong to one of the approved on-call groups.
+    kind: hard
+    terminal: false
+    predicate:
+      type: group_membership_any
+      values:
+        - "PLACEHOLDER-group-objectid-oncall-prod"
+        - "PLACEHOLDER-group-objectid-oncall-platform"
+
+  - id: R005-role-allowlist
+    description: Requested role must be in the approved role list.
+    kind: hard
+    terminal: false
+    predicate:
+      type: role_in_allowlist
+      values:
+        - "Reader"
+        - "Monitoring Reader"
+        - "Log Analytics Reader"
+        - "Contributor"   # PLACEHOLDER — Zafin to confirm
+
+  - id: R006-scope-allowlist
+    description: Requested scope must start with an approved prefix.
+    kind: hard
+    terminal: false
+    predicate:
+      type: scope_prefix_in_allowlist
+      values:
+        - "/subscriptions/PLACEHOLDER-sub-id/resourceGroups/rg-prod-"
+        - "/subscriptions/PLACEHOLDER-sub-id/resourceGroups/rg-platform-"
+
+  - id: R007-duration-cap
+    description: Activation duration must not exceed 8 hours.
+    kind: soft
+    terminal: false
+    predicate:
+      type: activation_duration_max_hours
+      value: 8
+
+  - id: R008-activation-frequency
+    description: Requester has not activated this role more than 3 times in the last 24 hours.
+    kind: soft
+    terminal: false
+    predicate:
+      type: recent_activations_max
+      window_hours: 24
+      count: 3
