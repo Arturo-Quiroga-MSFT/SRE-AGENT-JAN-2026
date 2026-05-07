@@ -46,7 +46,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- 1. Prereqs ---------------------------------------------------------------
 
-$requiredModules = @('Microsoft.Graph.Authentication', 'Microsoft.Graph.Identity.Governance')
+$requiredModules = @('Microsoft.Graph.Authentication', 'Microsoft.Graph.Identity.Governance', 'Microsoft.Graph.Beta.Identity.SignIns')
 foreach ($m in $requiredModules) {
     if (-not (Get-Module -ListAvailable -Name $m)) {
         Write-Host "Installing module $m ..." -ForegroundColor Yellow
@@ -72,7 +72,11 @@ Write-Host "Role: $($role.DisplayName)  id=$($role.Id)" -ForegroundColor Green
 
 # PolicyAssignments map (scope, role) -> policyId. We need the policyId for
 # directory scope '/' and this roleDefinitionId.
-$assignment = Get-MgPolicyRoleManagementPolicyAssignment `
+# NOTE: using Beta cmdlets (Microsoft.Graph.Beta.Identity.SignIns) because the
+# v1.0 Get-MgPolicyRoleManagementPolicyAssignment cmdlet ships in a different
+# module that may not be present in some installs. Beta exposes identical
+# semantics for these PIM policy operations.
+$assignment = Get-MgBetaPolicyRoleManagementPolicyAssignment `
     -Filter "scopeId eq '/' and scopeType eq 'DirectoryRole' and roleDefinitionId eq '$($role.Id)'" `
     -ErrorAction Stop | Select-Object -First 1
 
@@ -82,7 +86,7 @@ Write-Host "Policy: $policyId" -ForegroundColor Green
 
 # --- 5. Pull current rules and find the end-user approval rule ---------------
 
-$rules = Get-MgPolicyRoleManagementPolicyRule -UnifiedRoleManagementPolicyId $policyId
+$rules = Get-MgBetaPolicyRoleManagementPolicyRule -UnifiedRoleManagementPolicyId $policyId
 $approvalRule = $rules | Where-Object { $_.Id -eq 'Approval_EndUser_Assignment' } | Select-Object -First 1
 if (-not $approvalRule) { throw "Rule 'Approval_EndUser_Assignment' not found on policy $policyId." }
 
@@ -142,7 +146,7 @@ $body = @{
 # --- 7. Apply -----------------------------------------------------------------
 
 if ($PSCmdlet.ShouldProcess("policy $policyId / rule Approval_EndUser_Assignment", "Set isApprovalRequired=true with $($primaryApprovers.Count) approver(s)")) {
-    Update-MgPolicyRoleManagementPolicyRule `
+    Update-MgBetaPolicyRoleManagementPolicyRule `
         -UnifiedRoleManagementPolicyId $policyId `
         -UnifiedRoleManagementPolicyRuleId 'Approval_EndUser_Assignment' `
         -BodyParameter $body | Out-Null
@@ -151,7 +155,7 @@ if ($PSCmdlet.ShouldProcess("policy $policyId / rule Approval_EndUser_Assignment
 
 # --- 8. Verify ---------------------------------------------------------------
 
-$verify = Get-MgPolicyRoleManagementPolicyRule `
+$verify = Get-MgBetaPolicyRoleManagementPolicyRule `
     -UnifiedRoleManagementPolicyId $policyId `
     -UnifiedRoleManagementPolicyRuleId 'Approval_EndUser_Assignment'
 Write-Host "`n=== Updated Approval_EndUser_Assignment rule ===" -ForegroundColor Cyan

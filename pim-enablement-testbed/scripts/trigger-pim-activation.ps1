@@ -36,7 +36,11 @@ param(
     [string] $Justification = "SRE agent testbed: validating gap-filler pim-mcp end-to-end",
     [string] $TicketNumber  = "TESTBED-001",
     [string] $TicketSystem  = "manual",
-    [ValidateRange(1, 8)] [int] $DurationHours = 1
+    [ValidateRange(1, 8)] [int] $DurationHours = 1,
+    # Force a device-code login so you can pick which account to sign in with.
+    # Use this when the SDK's cached token is for a different user (common
+    # when an admin account was used earlier in the same shell/profile).
+    [switch] $UseDeviceCode
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,8 +63,21 @@ $scopes = @(
     'RoleAssignmentSchedule.ReadWrite.Directory',
     'RoleManagement.ReadWrite.Directory'
 )
+
+# Drop any cached in-memory session so a fresh sign-in is forced.
+try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch { }
+
 Write-Host "Connecting to Microsoft Graph (tenant $TenantId) ..." -ForegroundColor Cyan
-Connect-MgGraph -TenantId $TenantId -Scopes $scopes -NoWelcome | Out-Null
+if ($UseDeviceCode) {
+    Write-Host "  Using device-code flow. When prompted, open the URL and sign in as the REQUESTER (e.g. pim-requester@...)." -ForegroundColor Yellow
+    # NOTE: do NOT pipe to Out-Null here — device-code instructions are written
+    # to the success stream and would be swallowed.
+    # -ContextScope Process avoids reusing the on-disk MSAL token cache,
+    # which silently re-authenticates as a previously-signed-in user.
+    Connect-MgGraph -TenantId $TenantId -Scopes $scopes -UseDeviceCode -ContextScope Process
+} else {
+    Connect-MgGraph -TenantId $TenantId -Scopes $scopes -NoWelcome | Out-Null
+}
 
 $ctx = Get-MgContext
 if (-not $ctx) { throw "Connect-MgGraph failed." }
