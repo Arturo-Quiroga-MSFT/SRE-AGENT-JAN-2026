@@ -1,7 +1,8 @@
 # PIM Enablement Testbed
 
 > Azure SRE Agent — PIM Enablement use case for Zafin
-> Status: scaffolding (May 4, 2026) · **Hybrid: Enterprise MCP + thin custom MCP for one endpoint**
+> Status: **E2E partially validated (May 7, 2026)** · Layer 1 (gap-filler) and Layer 2 (Graph plumbing) green; Layer 3 (Foundry agent wiring) in progress
+> Architecture: **Hybrid — Enterprise MCP + thin custom MCP for one endpoint**
 > Target: mid-June 2026 internal demo · end-of-June customer-facing demo
 
 This testbed implements the **PIM Enablement** use case agreed with Zafin
@@ -36,6 +37,26 @@ Architecture and design rationale: see
 [`partner-context/PIM_ENABLEMENT_ARCH_SKETCH.md`](../partner-context/PIM_ENABLEMENT_ARCH_SKETCH.md)
 and the standalone deck
 [`partner-context/ZAFIN_PIM_ENABLEMENT_DECK_MAY2026.pptx`](../partner-context/ZAFIN_PIM_ENABLEMENT_DECK_MAY2026.pptx).
+
+**Live test artifacts (May 5–7):**
+[`test-plan-May-5-2026.md`](./test-plan-May-5-2026.md) ·
+[`test-results-May-5-2026.md`](./test-results-May-5-2026.md) ·
+[`from-sre-agent-1.md`](./from-sre-agent-1.md) (sample SRE-agent self-summary).
+
+---
+
+## Current state — May 7, 2026
+
+| Layer | What it covers | Status |
+|---|---|---|
+| **Layer 1 — gap-filler infra** | `pim-mcp` 0.2.4 deployed to Container Apps; MI bound to Graph; SSE `/sse` healthy; smoke test green | ✅ |
+| **Layer 2 — Graph plumbing** | Test users created (`pim-requester`, `pim-approver`); eligibility assigned (`Provisioned`); approval policy patched (`isApprovalRequired=true`); requester self-activation lands `PendingApproval` | ✅ |
+| **Layer 1 ↔ 2 chain** | `list_pending_pim_requests` returns the live PendingApproval request with matching GUID, justification, ticket info | ✅ |
+| **Layer 3 — Foundry agent wiring** | Add `pim-mcp` as MCP tool on the SRE agent; verify tool discovery; run prompts 5a/5b/6/8; capture latency | 🟡 in progress |
+| **Layer 4 — agent reasoning** | Self-knowledge prompt; `list_pending_pim_requests` invocation; rule-grounded approve/deny recommendation; post-approval re-check | ⬜ blocked on Layer 3 |
+| **Layer 5 — latency loop** | 10-trial p50/p95 over `list_pending_pim_requests` for the test-results doc | ⬜ |
+
+**Demo readiness:** the gap-filler + Graph plumbing fully proves the architectural decision (hybrid Enterprise MCP + 1-tool custom MCP). What remains is the Foundry surface — a click-through to register the MCP tool and a small set of prompt validations.
 
 ---
 
@@ -194,6 +215,9 @@ account, but still applies to any MI-based assignment (Jira/Teams paths).
 pim-enablement-testbed/
 ├── README.md                       # This file
 ├── azure.yaml                      # azd template
+├── test-plan-May-5-2026.md         # 10-step E2E validation plan
+├── test-results-May-5-2026.md      # Live execution log (Steps 2–4 ✅)
+├── from-sre-agent-1.md             # Sample SRE-agent self-summary of this testbed
 ├── infra/                          # Bicep
 │   ├── main.bicep                  # Subscription-level orchestrator
 │   ├── pim-test-rg.bicep           # Test RG + Log Analytics + CAE
@@ -202,7 +226,7 @@ pim-enablement-testbed/
 │                                   # Enterprise MCP cannot reach today.
 ├── mcp-servers/
 │   └── pim-mcp/                    # ACTIVE — single-tool custom MCP
-│                                   # (list_pending_pim_requests only).
+│                                   # (list_pending_pim_requests + health).
 │                                   # App-only Graph auth via Managed Identity.
 │                                   # Read-only by construction (no write tools).
 │                                   # Will be retired when Enterprise MCP ships
@@ -212,14 +236,23 @@ pim-enablement-testbed/
 │   ├── adaptive-card.json          # Output card template
 │   └── validation-rules.yaml       # Placeholder rule table (Zafin owns content)
 ├── scripts/
-│   ├── provision-enterprise-mcp.ps1  # One-time tenant provisioning
-│   ├── seed-test-users.ps1         # Provision test users + groups
+│   ├── REPRODUCE.md                # Step-by-step reproduction guide
+│   ├── provision-enterprise-mcp.ps1  # One-time Enterprise-MCP tenant provisioning
+│   ├── grant-pim-mcp-app-role.ps1  # Grant app-only Graph roles to pim-mcp MI
+│   ├── create-test-users.ps1       # Idempotent test-user creation (requester + approver)
+│   ├── seed-test-users.ps1         # Older seed script (groups + bulk users)
+│   ├── assign-pim-eligibility.ps1  # Step 2 — assign requester as PIM-eligible
+│   ├── configure-pim-approval.ps1  # Step 3 — require approval on activation policy (Beta cmdlets)
+│   ├── trigger-pim-activation.ps1  # Step 4 — requester submits self-activation (device code)
+│   ├── smoke-test-pim-mcp.py       # Layer-1 smoke test: SSE → list_pending_pim_requests
+│   ├── test-enterprise-mcp.py      # Enterprise-MCP reachability probe
 │   ├── trigger-pim-request.sh      # Synthetic activation request for demo
-│   └── verify-deployment.sh        # Smoke test
+│   └── verify-deployment.sh        # End-to-end smoke test
 └── docs/
     ├── enterprise-mcp-setup.md     # One-time provisioning walkthrough
     ├── demo-script.md              # Happy path + 3 failure paths
     ├── threat-model.md             # Compliance / threat-model note
+    ├── UPSTREAM_BUGS.md            # BUG-001: ReadWrite scope required at runtime
     └── deployment-runbook.md       # Step-by-step setup
 ```
 
@@ -263,19 +296,24 @@ pim-enablement-testbed/
 
 ## Build order (mid-June target)
 
-| Week | Focus |
-|------|-------|
-| **W1** (now) | Provision test tenant + RG; **provision Enterprise MCP Server** + MCP Client app + service-account user |
-| **W1** | Agent knowledge file + Adaptive Card + placeholder rules |
-| **W1–2** | Wire Foundry agent → Enterprise MCP + Jira MCP + Teams webhook; first end-to-end test |
-| **W2** | Synthetic PIM request generator script; happy-path demo |
-| **W3** | Failure-path scenarios; demo walkthrough; threat-model note |
-| **W4** | Buffer / iterate; rehearse |
-| **W5** (mid-June) | Internal demo to Poornika / Jiban / Richard |
-| **W6** | Iterate on Zafin's actual rule table once received; customer demo |
+| Week | Focus | Status |
+|------|-------|---|
+| **W1** | Provision test tenant + RG; provision Enterprise MCP Server; MCP Client app; service-account user | ✅ |
+| **W1** | Build + deploy `pim-mcp` 0.2.4 to ACA; MI bound; smoke test green | ✅ |
+| **W1** | Agent knowledge file + Adaptive Card + placeholder rules | ✅ |
+| **W2** (now) | E2E test plan; create test users; assign eligibility; configure approval; trigger activation; full chain validated | ✅ Steps 2–4 |
+| **W2** | Wire `pim-mcp` into Foundry SRE agent; run prompt validations 5a/5b/6/8 | 🟡 in progress |
+| **W2** | Latency loop (p50/p95); approver flow + post-approval re-check | ⬜ |
+| **W3** | Wire Jira MCP + Teams webhook; first true end-to-end (PIM event → recommendation → card) | ⬜ |
+| **W3** | Failure-path scenarios; demo walkthrough; threat-model note finalize | ⬜ |
+| **W4** | Buffer / iterate; rehearse | ⬜ |
+| **W5** (mid-June) | Internal demo to Poornika / Jiban / Richard | ⬜ |
+| **W6** | Iterate on Zafin's actual rule table once received; customer demo | ⬜ |
 
-> The Enterprise MCP server pivot collapses the previous W1–W2 PIM-MCP
-> build into ~1–2 days of provisioning + Foundry connector setup.
+> The Enterprise MCP server pivot collapsed the original PIM-MCP build into
+> ~2 days of provisioning + a single-tool gap-filler. Layers 1 and 2 are
+> validated end-to-end as of May 7. Remaining work is Foundry-side surface
+> wiring + rule iteration.
 
 ---
 
