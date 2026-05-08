@@ -46,6 +46,9 @@ and the standalone deck
 **Partner-enablement quickstart (NEW, May 8):**
 [`enterprise-mcp-client-demo/`](./enterprise-mcp-client-demo/) — 10-minute VS Code Copilot Chat walk-through showing the hybrid Enterprise MCP + `pim-mcp` architecture in action, with tiered scope grants (PIM core → identity context → SRE/audit broadening) and 5 demo prompts.
 
+**Visual overview (NEW, May 8):**
+[`docs/architecture-diagrams.md`](./docs/architecture-diagrams.md) — six Mermaid diagrams covering system context, runtime sequence, tool-surface coverage, scope tiers, repo layout, and validation state.
+
 ---
 
 ## Current state — May 8, 2026

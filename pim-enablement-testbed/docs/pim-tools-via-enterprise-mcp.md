@@ -88,6 +88,7 @@ That's also why [`04-hybrid-pending.md`](../enterprise-mcp-client-demo/prompts/0
 
 ## Cross-references
 
+- [`architecture-diagrams.md`](architecture-diagrams.md) — visual overview (6 Mermaid diagrams)
 - [`enterprise-mcp-setup.md`](enterprise-mcp-setup.md) — full provisioning + scope discovery
 - [`../enterprise-mcp-client-demo/README.md`](../enterprise-mcp-client-demo/README.md) — VS Code client demo (4 tiers, 6 prompts)
 - [`../mcp-servers/pim-mcp/`](../mcp-servers/pim-mcp/) — gap-filler MCP source
