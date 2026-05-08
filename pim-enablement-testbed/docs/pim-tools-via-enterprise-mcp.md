@@ -64,13 +64,13 @@ This is the structural gap our custom [`pim-mcp`](../mcp-servers/pim-mcp/) serve
 │        list-properties)                     │                              │
 │ Auth:  Delegated OAuth (user signs in)      │ Auth:  App-only via MI       │
 │                                             │                              │
-│ ✅ Role definitions                          │ ✅ list_pending_pim_requests │
-│ ✅ Eligibility schedules                     │     (the structural gap)    │
-│ ✅ Active assignments                        │ ✅ get_request_status        │
-│ ✅ Role-management policies                  │ ✅ get_request_approver      │
-│ ✅ PIM audit history (auditLogs)             │ ✅ list_active_role_         │
-│ ✅ User / group / license context            │     assignments             │
-│ ❌ PendingApproval requests                  │ ✅ get_user                  │
+│ ✅ Role definitions                         │ ✅ list_pending_pim_requests │
+│ ✅ Eligibility schedules                    │     (the structural gap)     │
+│ ✅ Active assignments                       │ ✅ get_request_status        │
+│ ✅ Role-management policies                 │ ✅ get_request_approver      │
+│ ✅ PIM audit history (auditLogs)            │ ✅ list_active_role_         │
+│ ✅ User / group / license context           │     assignments              │
+│ ❌ PendingApproval requests                 │ ✅ get_user                  │
 │                                             │ ✅ get_role_definition       │
 │                                             │ ✅ health                    │
 └─────────────────────────────────────────────┴──────────────────────────────┘
@@ -92,3 +92,43 @@ That's also why [`04-hybrid-pending.md`](../enterprise-mcp-client-demo/prompts/0
 - [`../enterprise-mcp-client-demo/README.md`](../enterprise-mcp-client-demo/README.md) — VS Code client demo (4 tiers, 6 prompts)
 - [`../mcp-servers/pim-mcp/`](../mcp-servers/pim-mcp/) — gap-filler MCP source
 - [`../README.md`](../README.md) §"F4. PIM access — hybrid" — architectural rationale
+
+---
+
+## Microsoft's published PIM sample prompts (upstream catalog)
+
+Microsoft's [sample-prompts page](https://learn.microsoft.com/en-us/graph/mcp-server/mcp-server-sample-prompts) ships four PIM prompts in the *"Role assignments and privileged access"* section. Our [Tier 1 + 2 scope set](../enterprise-mcp-client-demo/README.md) maps to them one-for-one, which is a good sign our scoping matches Microsoft's intended baseline:
+
+| Microsoft sample prompt | Required scope(s) | Our tier |
+|---|---|---|
+| "List all Global Administrators" | `MCP.RoleManagement.Read.Directory` | Tier 1 |
+| "Which roles is [user email] assigned to?" | `MCP.User.Read.All` + `MCP.RoleManagement.Read.Directory` | Tier 1 + 2 |
+| "Show me active Privileged Identity Management (PIM) assignments" | `MCP.RoleAssignmentSchedule.Read.Directory` | Tier 1 |
+| "Who is eligible for the [role name] role?" | `MCP.RoleEligibilitySchedule.Read.Directory` | Tier 1 |
+
+Notably absent from Microsoft's catalog: anything that lists **PendingApproval** PIM requests — for the same structural reason documented above (delegated `RoleAssignmentSchedule.ReadWrite.Directory` not exposed by Enterprise MCP). That's the gap our `pim-mcp` fills.
+
+### How the agent + MCP loop runs (per Microsoft Learn)
+
+The ["How it works"](https://learn.microsoft.com/en-us/graph/mcp-server/mcp-server-sample-prompts) section formalizes the six-step flow we describe informally elsewhere in this doc:
+
+1. **NLP processing** — LLM extracts intent from prompt + chat history; decides to call `microsoft_graph_suggest_queries`.
+2. **Semantic search** — `microsoft_graph_suggest_queries` embeds the question and returns matching Graph examples from its curated catalog.
+3. **Query selection** — LLM picks the most relevant API call (e.g., `GET /users/$count`) and its parameters.
+4. **Execution** — LLM invokes `microsoft_graph_get`. The MCP server enforces the user's privileges and the scopes granted to the MCP client.
+5. **API processing** — MCP server forwards to Microsoft Graph, receives JSON, returns it to the client.
+6. **Natural language response** — LLM converts JSON to a human-readable answer.
+
+This is also why scope-tiering on the *MCP client app* is the only meaningful access-control surface: the user's own Entra role grants are necessary but not sufficient — calls also fail if the granted MCP scope set is too narrow for the chosen Graph URL.
+
+---
+
+## Authoritative Microsoft Learn references
+
+| Topic | Link |
+|---|---|
+| Microsoft Graph overview (the API the MCP server fronts) | <https://learn.microsoft.com/en-us/graph/overview> |
+| Enterprise MCP — sample prompts + "How it works" | <https://learn.microsoft.com/en-us/graph/mcp-server/mcp-server-sample-prompts> |
+| Enterprise MCP — get started (HTTP + VS Code client setup) | <https://learn.microsoft.com/en-us/graph/mcp-server/get-started?tabs=http%2Cvscode> |
+| Enterprise MCP — use with Microsoft Foundry | <https://learn.microsoft.com/en-us/graph/mcp-server/use-enterprise-mcp-server-microsoft-foundry> |
+
