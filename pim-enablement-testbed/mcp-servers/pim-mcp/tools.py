@@ -101,6 +101,7 @@ DEFAULT_SELECT = ",".join(
 DEFAULT_EXPAND = "principal($select=id,displayName,userPrincipalName),roleDefinition($select=id,displayName)"
 
 _credential: DefaultAzureCredential | None = None
+_token_cache: dict[str, Any] = {"token": None, "exp": 0.0}
 
 
 def _get_credential() -> DefaultAzureCredential:
@@ -108,6 +109,62 @@ def _get_credential() -> DefaultAzureCredential:
     if _credential is None:
         _credential = DefaultAzureCredential()
     return _credential
+
+
+async def _get_graph_token() -> str:
+    """Acquire a Graph token, preferring direct IDENTITY_ENDPOINT calls
+    with ``bypass_cache=true`` when running on Azure Container Apps.
+
+    The Container Apps IMDS sidecar caches tokens by (client_id, resource)
+    for the full 24h token lifetime and refuses to refresh until the
+    cached token nears expiry. This means newly-granted appRole permissions
+    do not appear in the SDK-acquired token for many hours after consent.
+
+    We work around this by:
+      1. Hitting IDENTITY_ENDPOINT directly with ``bypass_cache=true`` to
+         force the sidecar to mint a fresh token (always reflects current
+         appRole grants).
+      2. Caching the resulting token in-process for ~50 minutes to avoid
+         calling IMDS on every Graph request.
+      3. Falling back to ``DefaultAzureCredential`` for local dev where
+         IDENTITY_ENDPOINT is not set.
+    """
+    import time
+
+    now = time.time()
+    if _token_cache["token"] and _token_cache["exp"] - now > 60:
+        return _token_cache["token"]
+
+    identity_endpoint = os.getenv("IDENTITY_ENDPOINT")
+    identity_header = os.getenv("IDENTITY_HEADER")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+
+    if identity_endpoint and identity_header and client_id:
+        params = {
+            "api-version": "2019-08-01",
+            "resource": "https://graph.microsoft.com",
+            "client_id": client_id,
+            "bypass_cache": "true",
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                identity_endpoint,
+                params=params,
+                headers={"X-IDENTITY-HEADER": identity_header},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            token = data["access_token"]
+            # expires_on is a unix timestamp string on Container Apps IMDS
+            exp = float(data.get("expires_on") or now + 3000)
+            _token_cache["token"] = token
+            _token_cache["exp"] = exp
+            return token
+
+    token = _get_credential().get_token(GRAPH_SCOPE).token
+    _token_cache["token"] = token
+    _token_cache["exp"] = now + 3000
+    return token
 
 
 async def _graph_get(path: str, params: dict[str, str] | None = None, *, beta: bool = False) -> dict[str, Any]:
@@ -120,7 +177,7 @@ async def _graph_get(path: str, params: dict[str, str] | None = None, *, beta: b
             Used only by ``get_request_approver`` (the approvals collection
             is beta-only).
     """
-    token = _get_credential().get_token(GRAPH_SCOPE).token
+    token = await _get_graph_token()
     base = GRAPH_BETA_BASE_URL if beta else GRAPH_BASE_URL
     url = f"{base}{path}"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
