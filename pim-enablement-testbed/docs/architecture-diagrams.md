@@ -34,7 +34,7 @@ flowchart LR
     end
 
     subgraph ACA["Azure Container Apps (eastus2)"]
-        PimMCP["pim-mcp 0.6.1<br/>FastMCP streamable-http /mcp<br/><i>7 tools, app-only via MI</i>"]
+        PimMCP["pim-mcp 0.7.0<br/>FastMCP streamable-http /mcp<br/><i>8 tools, app-only via MI</i>"]
         MI[/User-assigned<br/>Managed Identity/]
     end
 
@@ -135,7 +135,7 @@ flowchart LR
 
     subgraph Coverage["Tool that satisfies it"]
         direction TB
-        r1["Enterprise MCP &nbsp;·&nbsp; <code>microsoft_graph_get</code>"]
+        r1["Enterprise MCP &nbsp;or&nbsp; pim-mcp <code>list_eligible_role_assignments</code>"]
         r2["Enterprise MCP &nbsp;or&nbsp; pim-mcp <code>list_active_role_assignments</code>"]
         r3["Enterprise MCP &nbsp;or&nbsp; pim-mcp <code>get_role_definition</code>"]
         r4["Enterprise MCP &nbsp;or&nbsp; pim-mcp <code>get_user</code>"]
@@ -227,7 +227,7 @@ mindmap
     test-results-May-5-2026.md
     mcp-servers/pim-mcp/
       src/server.py
-        FastMCP · 7 tools
+        FastMCP · 8 tools
       Dockerfile
     infra/
       pim-mcp-aca.bicep
@@ -268,7 +268,7 @@ State machine of what's proven, what's deferred, and what's optional.
 ```mermaid
 stateDiagram-v2
     [*] --> L1
-    L1: Layer 1 — gap-filler infra<br/>pim-mcp 0.6.1 on ACA · 7 tools · MI
+    L1: Layer 1 — gap-filler infra<br/>pim-mcp 0.7.0 on ACA · 8 tools · MI
     L2: Layer 2 — Graph plumbing<br/>test users · eligibility · approval policy
     L12: Layer 1↔2 chain<br/>PendingApproval reachable
     L3: Layer 3 — Azure SRE Agent wiring<br/>pim-mcp + jira-mcp + grafana-mcp

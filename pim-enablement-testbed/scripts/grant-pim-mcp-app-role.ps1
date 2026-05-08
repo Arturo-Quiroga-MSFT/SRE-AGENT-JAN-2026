@@ -38,6 +38,11 @@ param(
         # Required by `get_user` (resolves principalId -> displayName/UPN).
         'User.Read.All',
         # Required by `get_role_definition` (resolves roleDefinitionId -> name).
+        # NOTE (0.7.0): also satisfies `list_eligible_role_assignments` against
+        # /roleManagement/directory/roleEligibilityScheduleInstances, so no
+        # separate RoleEligibilitySchedule.Read.Directory grant is required.
+        # If you prefer the documented least-privilege scope instead, grant
+        # 'RoleEligibilitySchedule.Read.Directory' and remove RoleManagement.
         'RoleManagement.Read.Directory',
         # Required by `get_request_approver` (Graph beta
         # /roleManagement/directory/roleAssignmentApprovals/{id}/steps).

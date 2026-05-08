@@ -1,11 +1,12 @@
 """PIM MCP tool implementations — read-only by construction.
 
-Exposes seven tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
+Exposes eight tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
 
 - ``list_pending_pim_requests`` — the trigger surface (PendingApproval only)
 - ``get_request_status`` — final disposition of a specific request by ID
 - ``get_request_approver`` — audit trail: who approved/denied, when, with what justification
 - ``list_active_role_assignments`` — currently-active assignments for a principal
+- ``list_eligible_role_assignments`` — PIM-eligible assignments (added 0.7.0)
 - ``get_user`` — resolve principalId to displayName/UPN/etc.
 - ``get_role_definition`` — resolve roleDefinitionId to displayName/etc.
 - ``health`` — liveness probe
@@ -42,6 +43,7 @@ GRAPH_BETA_BASE_URL = os.getenv("GRAPH_BETA_BASE_URL", "https://graph.microsoft.
 GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 PIM_REQUESTS_PATH = "/roleManagement/directory/roleAssignmentScheduleRequests"
 PIM_INSTANCES_PATH = "/roleManagement/directory/roleAssignmentScheduleInstances"
+PIM_ELIGIBLE_INSTANCES_PATH = "/roleManagement/directory/roleEligibilityScheduleInstances"
 PIM_APPROVALS_PATH_BETA = "/roleManagement/directory/roleAssignmentApprovals"
 USERS_PATH = "/users"
 ROLE_DEFINITIONS_PATH = "/roleManagement/directory/roleDefinitions"
@@ -80,6 +82,23 @@ INSTANCE_DEFAULT_SELECT = ",".join(
         "endDateTime",
         "roleAssignmentOriginId",
         "roleAssignmentScheduleId",
+    ]
+)
+
+# Eligibility instances have a slightly different shape than assignment
+# instances: no `assignmentType` or `roleAssignmentOriginId`; the schedule
+# back-pointer is `roleEligibilityScheduleId` instead.
+ELIGIBLE_INSTANCE_DEFAULT_SELECT = ",".join(
+    [
+        "id",
+        "principalId",
+        "roleDefinitionId",
+        "directoryScopeId",
+        "appScopeId",
+        "memberType",
+        "startDateTime",
+        "endDateTime",
+        "roleEligibilityScheduleId",
     ]
 )
 
@@ -371,6 +390,68 @@ def register_tools(mcp: FastMCP) -> None:
         }
         log.info("list_active_role_assignments principal_id=%s top=%d", principal_id, top)
         raw = await _graph_get(PIM_INSTANCES_PATH, params)
+        items = raw.get("value", [])
+        return {
+            "value": items,
+            "@odata.context": raw.get("@odata.context"),
+            "count": len(items),
+        }
+
+    @mcp.tool()
+    async def list_eligible_role_assignments(
+        principal_id: str | None = None,
+        top: int = 50,
+    ) -> dict[str, Any]:
+        """List PIM-eligible directory role assignments.
+
+        Returns rows from ``roleEligibilityScheduleInstances`` — these are the
+        eligibilities that *could be activated* via PIM (i.e., who has the
+        right to activate which role, not who currently holds it). Use this
+        to answer "who is eligible for role X?" or "what roles can user Y
+        activate?". For currently-active assignments, use
+        ``list_active_role_assignments`` instead.
+
+        Read-only. Requires either ``RoleEligibilitySchedule.Read.Directory``
+        or ``RoleManagement.Read.Directory`` application permission on the
+        server's managed identity. The latter is already granted (used by
+        ``get_role_definition``), so no new app-role assignment is strictly
+        required to enable this tool.
+
+        Why this tool exists: Microsoft's Enterprise MCP CAN serve this
+        endpoint with delegated auth, but the Azure SRE Agent's MCP wizard
+        cannot wire up Enterprise MCP today (delegated-OAuth gap, testbed
+        roadblock #3). This tool is the agent-side workaround until that
+        wizard limitation is lifted.
+
+        Args:
+            principal_id: Optional Entra ID object ID (GUID). When provided,
+                filters to eligibilities for that principal. When omitted,
+                returns all eligibilities tenant-wide (capped by ``top``).
+            top: Max rows to return (1-100). Defaults to 50.
+
+        Returns:
+            JSON object with a ``value`` array of eligibility instances.
+            Each row includes principalId, roleDefinitionId, directoryScopeId,
+            memberType (Direct/Group/Inherited), startDateTime, endDateTime
+            (null for permanent eligibilities), and roleEligibilityScheduleId.
+            Pair with ``get_user`` and ``get_role_definition`` for human-
+            readable output.
+        """
+        top = max(1, min(int(top), 100))
+        params: dict[str, str] = {
+            "$select": ELIGIBLE_INSTANCE_DEFAULT_SELECT,
+            "$top": str(top),
+        }
+        if principal_id:
+            if not isinstance(principal_id, str):
+                raise ValueError("principal_id must be a string (Entra object ID) when provided")
+            params["$filter"] = f"principalId eq '{principal_id}'"
+        log.info(
+            "list_eligible_role_assignments principal_id=%s top=%d",
+            principal_id or "<all>",
+            top,
+        )
+        raw = await _graph_get(PIM_ELIGIBLE_INSTANCES_PATH, params)
         items = raw.get("value", [])
         return {
             "value": items,
