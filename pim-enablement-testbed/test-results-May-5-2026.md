@@ -309,6 +309,46 @@ pwsh -c "Connect-MgGraph -TenantId a172a259-b1c7-4944-b2e1-6d551f954711 -Scopes 
 - Optional 5th tool: `get_request_status(request_id)` to close the disposition gap the agent itself flagged.
 - Optional 6th tool: `list_active_role_assignments(principal_id)` for post-approval verification — would let the agent confirm "approved" deterministically.
 
+### Step 7b — Disposition gap closed (pim-mcp 0.5.0, ~15:10 UTC) ✅
+
+**Both follow-up tools shipped same-day** (parking lot drained):
+- `get_request_status(request_id)` — final state of any PIM request
+- `list_active_role_assignments(principal_id)` — currently-active assignments
+
+Image `pim-mcp:0.5.0` deployed to `ca-pimtest-pimmcp` revision `0000009`. CLI smoke test verified both tools return real Graph data. Re-ticked checkboxes in SRE Agent → PIM-MCP connector wizard (now 6 tools).
+
+**Re-prompt (verbatim, 2026-05-08 ~15:10 UTC):**
+
+> *"What was the final disposition of PIM request `d13bbfc1-9ca5-46cf-9b8b-c6521213a9d0`? And does the requester currently have the role active?"*
+
+**Agent behavior:** invoked both new tools in sequence (`Get Request Status` + `List Active Role Assignments` — both tool-call cards visible, both `Completed`), then composed a structured-table answer.
+
+**Agent answer (key fields):**
+
+| Detail | Value |
+|---|---|
+| Final Status | Provisioned (approved) |
+| Approved At | 2026-05-08 14:51:23 UTC (~1h 17m after submission) |
+| Active Window | 14:51 UTC → 18:51 UTC today (4 hours) |
+| Assignment Type | Activated (Direct) |
+| Time Remaining | ~3h 40m from now |
+| Role | Privileged Role Administrator |
+| Scope | Directory root (/) |
+| Who | PIM Test Requester (`pim-requester@MngEnvMCAP094150.onmicrosoft.com`) |
+| Request ID | `d13bbfc1-9ca5-46cf-9b8b-c6521213a9d0` |
+
+Closing prose: *"The requester **currently has the role active**. The assignment is tied directly to this PIM request (schedule ID matches) and will automatically expire at 18:51 UTC today — no manual deactivation needed unless you want to revoke early."*
+
+**Quality observations:**
+- ✅ All 9 fields match Graph ground truth byte-for-byte (independently verified via `scripts/smoke-test-new-tools.py`).
+- ✅ Cross-tool reasoning correct — agent observed `roleAssignmentScheduleId` matched the request ID and explicitly cited that as evidence the assignment ties to *this* request.
+- ✅ Approval-latency math correct (13:34:22 submit → 14:51:23 approve = 77m ≈ "~1h 17m").
+- ✅ Time-remaining math correct (computed against current wall-clock).
+- ✅ Operational tone — "no manual deactivation needed unless you want to revoke early" is exactly what an experienced SRE would say.
+- ✅ No hallucination, no made-up fields.
+
+**Net result:** The disposition-gap parking-lot item the agent itself raised at end of Step 7 was identified, designed, coded, deployed, wired, and re-validated **within ~30 minutes**. The agent now has full read-side coverage of the PIM request lifecycle (pending → approved → active → expiring).
+
 ---
 
 ## Step 8 — Ask agent again: *"Are there any pending PIM requests?"*
