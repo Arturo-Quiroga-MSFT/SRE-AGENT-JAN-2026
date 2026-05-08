@@ -56,11 +56,11 @@ and the standalone deck
 | **Layer 4 — agent reasoning** | Prompts 5a (find pending) + 5b (resolve IDs) + 6 (policy/risk reasoning) + 8 (approver-pastable triage) all pass; agent grounds answers in repo (validation-rules.yaml, configure-pim-approval.ps1) | ✅ |
 | **Layer 5 — latency loop** | 10-trial p50/p95 over `list_pending_pim_requests` for the test-results doc | ⬜ |
 | **Step 7 — full approver flow** | Approver-side approve in PIM portal → status flip → agent re-check returns empty (Step 7); disposition tools `get_request_status` + `list_active_role_assignments` (Step 7b); approver-identity audit trail via `get_request_approver` (Step 7c). All PASS 2026-05-08. | ✅ |
-| **Step 9 — Jira write-back** | Agent posts triage summary as Jira comment | ⬜ |
+| **Step 9 — Jira write-back** | Agent creates SCRUM ticket from pending PIM request, posts triage comment (R001–R007 + verdict), adds remote link to PIM portal, then appends final audit comment with approver identity + justification + timestamp post-decision. PASS 2026-05-08 — SCRUM-16 holds the full two-comment audit trail. | ✅ |
 
 > Note: Test-plan Steps 6 and 8 (agent triage prompt + post-approval re-check) are validated under **Layer 4 — agent reasoning** above. Step 10 (Foundry trace + ACA log inspection) overlaps Layer 5 latency capture and is pending.
 
-**Demo readiness:** full read/reason/audit path proven end-to-end (May 8) — agent answers *who requested → who approved → with what justification → when does it expire*. Remaining work is the latency loop and Jira write-back.
+**Demo readiness:** full read/reason/audit/write path proven end-to-end (May 8) — agent answers *who requested → who approved → with what justification → when does it expire*, **and** writes a parallel audit trail into Jira (SCRUM-16). Remaining work is Layer 5 latency capture and Step 10 trace inspection.
 
 ### Day 2 (May 7–8) roadblock removers — for future-you
 

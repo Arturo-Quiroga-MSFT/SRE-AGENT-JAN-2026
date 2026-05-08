@@ -449,11 +449,17 @@ Are there any pending PIM activation requests right now?
 
 **Pass criteria:** Audit comment present and complete. If Jira-side write isn't wired yet, mark **N/A** and capture as a follow-up.
 
-**Result:**
-- [ ] Pass / [ ] Fail / [ ] N/A (not yet wired)
-- Ticket ID: __________
-- Comment present: Y/N
-- Notes: __________
+**Result:** ✅ PASS (2026-05-08) — full two-comment audit trail on SCRUM-16
+
+- [x] Pass / [ ] Fail / [ ] N/A
+- Ticket ID: **[SCRUM-16](https://aq-r2d2.atlassian.net/browse/SCRUM-16)** (`aq-r2d2.atlassian.net`)
+- PIM request: `d9624fab-2974-4b34-9b53-d220cea1ac85`
+- Comments present: **Y** — two automated comments by the SRE agent:
+  - `10000` — pre-decision validation analysis (R001–R007 checklist + verdict + recommended approver action)
+  - `10001` — post-decision audit record (final status `Denied`, approver `pim-approver@MngEnvMCAP094150.onmicrosoft.com` / OID `00a13120-c099-45bc-851a-861ade749067`, reviewed-at `2026-05-08T17:43:43Z`, approver justification quoted verbatim)
+- Remote link present: **Y** — SCRUM-16 → Azure portal PIM blade for the Privileged Role Administrator role definition
+- Tools exercised on jira-mcp: `jira_create_issue`, `jira_add_comment` (×2), `jira_create_remote_issue_link`
+- Notes: Agent went beyond the rule table on its own — flagged the repeat-offender pattern (same requester had identical PRA request denied earlier the same day, request `4dce3295`) and proposed a least-privilege alternative (`Application Administrator` scoped to `grocery-api-sp`). Minor consistency nit: R001 was marked `FAIL (hard)` based on the placeholder ticket reference in the justification rather than `Unverified` after a `jira_search` lookup — outcome was correct, path was assertion-not-verification. Logged as a follow-up to `agent/knowledge.md`. Full Foundry transcripts archived under `SRE-AGENT-CHATS/{3,4}.md`.
 
 ---
 
@@ -555,7 +561,7 @@ Threshold: p95 < 5000 ms = ✅; > 5000 ms = evidence for transport reconsiderati
 - [ ] Plan V2 migration to Function + OpenAPI
 - [ ] Other: __________
 
-**Confidence:** **High** — functional E2E (Steps 1, 5a, 5b, 6, 7, 7b, 7c, 8) all pass with strong reasoning quality. Full PIM lifecycle now traceable through the agent: pending → triage → approval (with approver identity + justification) → activation → expiry. Remaining work: Step 9 (Jira write-back), Step 10 (full trace inspection), p50/p95 latency loop. Strategic gap: SRE Agent connector wizard needs OAuth-delegated auth before Microsoft Enterprise MCP can be wired (architecturally preferable to the current MI-extended `pim-mcp`).
+**Confidence:** **High** — functional E2E (Steps 1, 5a, 5b, 6, 7, 7b, 7c, 8, 9) all pass with strong reasoning quality. Full PIM lifecycle now traceable through the agent: pending → triage → approval (with approver identity + justification) → activation → expiry, **plus** parallel audit trail written to Jira (SCRUM-16) automatically. Remaining work: Step 10 (full trace inspection), p50/p95 latency loop. Strategic gap: SRE Agent connector wizard needs OAuth-delegated auth before Microsoft Enterprise MCP can be wired (architecturally preferable to the current MI-extended `pim-mcp`).
 
 ---
 
