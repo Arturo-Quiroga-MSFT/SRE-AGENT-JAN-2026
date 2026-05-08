@@ -1,8 +1,9 @@
 """PIM MCP tool implementations — read-only by construction.
 
-Exposes eight tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
+Exposes nine tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
 
 - ``list_pending_pim_requests`` — the trigger surface (PendingApproval only)
+- ``list_pim_request_history`` — historical requests filtered by status (added 0.8.0)
 - ``get_request_status`` — final disposition of a specific request by ID
 - ``get_request_approver`` — audit trail: who approved/denied, when, with what justification
 - ``list_active_role_assignments`` — currently-active assignments for a principal
@@ -457,6 +458,106 @@ def register_tools(mcp: FastMCP) -> None:
             "value": items,
             "@odata.context": raw.get("@odata.context"),
             "count": len(items),
+        }
+
+    @mcp.tool()
+    async def list_pim_request_history(
+        status: str | None = None,
+        principal_id: str | None = None,
+        top: int = 25,
+    ) -> dict[str, Any]:
+        """List historical PIM role-assignment requests (any status except pending).
+
+        Closes the "browse all requests" gap left by
+        ``list_pending_pim_requests``, which only returns rows in
+        ``PendingApproval``. This tool returns *non-pending* rows from the
+        same Graph collection — i.e., the disposition history (Provisioned,
+        Denied, Cancelled, Expired, etc.).
+
+        For the final state of a *specific* request whose ID you already
+        know, use ``get_request_status`` instead — it's a direct GET and
+        avoids fetching the whole collection.
+
+        Read-only. Same Graph permission as ``list_pending_pim_requests``
+        (``RoleAssignmentSchedule.ReadWrite.Directory`` per UPSTREAM_BUGS
+        BUG-001), so no new app-role grant is required.
+
+        BUG-002 caveat: Graph rejects ``$filter``, ``$orderby``, and
+        ``$expand`` on this collection. We fetch the raw page with only
+        ``$select`` and ``$top``, then filter / sort client-side. This
+        means the ``top`` cap is approximate — we over-fetch (up to 100,
+        Graph's max) and trim after filtering.
+
+        Args:
+            status: Optional case-insensitive status filter. Examples:
+                ``"Provisioned"`` (approved + activated), ``"Denied"``,
+                ``"Cancelled"``, ``"Expired"``, ``"Failed"``,
+                ``"Revoked"``. When omitted, returns all non-pending
+                statuses. PendingApproval rows are always excluded — use
+                ``list_pending_pim_requests`` for those.
+            principal_id: Optional Entra Object ID (GUID) to filter by
+                requester. When omitted, returns rows for all principals.
+            top: Max rows to return after client-side filtering (1-100).
+                Defaults to 25.
+
+        Returns:
+            JSON object with a ``value`` array sorted by
+            ``createdDateTime`` desc (most recent first). Each row
+            includes id, status, action, principalId, roleDefinitionId,
+            directoryScopeId, justification, createdDateTime,
+            scheduleInfo, ticketInfo. Diagnostics fields:
+            ``fetchedCount`` (raw page size from Graph),
+            ``matchedCount`` (rows that passed the filter),
+            ``returnedCount`` (rows after ``top`` trim).
+        """
+        top = max(1, min(int(top), 100))
+        # Over-fetch the maximum page Graph allows (100), then filter
+        # client-side. BUG-002: $filter/$orderby/$expand all rejected.
+        params = {
+            "$select": DEFAULT_SELECT,
+            "$top": "100",
+        }
+        log.info(
+            "list_pim_request_history status=%s principal_id=%s top=%d",
+            status or "<any-non-pending>",
+            principal_id or "<all>",
+            top,
+        )
+        raw = await _graph_get(PIM_REQUESTS_PATH, params)
+        all_items = raw.get("value", [])
+
+        status_lc = status.lower() if status else None
+        if status_lc == "pendingapproval":
+            raise ValueError(
+                "PendingApproval is not supported here — use list_pending_pim_requests instead"
+            )
+
+        def _matches(row: dict[str, Any]) -> bool:
+            row_status = (row.get("status") or "").lower()
+            if row_status == "pendingapproval":
+                return False
+            if status_lc and row_status != status_lc:
+                return False
+            if principal_id and row.get("principalId") != principal_id:
+                return False
+            return True
+
+        matched = [r for r in all_items if _matches(r)]
+        # Sort newest-first by createdDateTime (string ISO-8601 sorts correctly).
+        matched.sort(key=lambda r: r.get("createdDateTime") or "", reverse=True)
+        trimmed = matched[:top]
+        return {
+            "value": trimmed,
+            "@odata.context": raw.get("@odata.context"),
+            "fetchedCount": len(all_items),
+            "matchedCount": len(matched),
+            "returnedCount": len(trimmed),
+            "hint": (
+                "Historical requests only (PendingApproval excluded). For "
+                "a specific known request ID, prefer get_request_status. "
+                "For approver identity / justification on a disposed "
+                "request, call get_request_approver(request_id)."
+            ),
         }
 
     @mcp.tool()

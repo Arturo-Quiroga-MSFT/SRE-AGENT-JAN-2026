@@ -7,14 +7,15 @@
 > semantics (we own) and rule content (Zafin owns — open question **D1**).
 >
 > **MCP servers actually wired into the SRE Agent today:**
-> - **`pim-mcp` 0.7.0** (custom, app-only via Managed Identity) — **8 tools**:
->   `list_pending_pim_requests`, `get_request_status`, `get_request_approver`,
+> - **`pim-mcp` 0.8.0** (custom, app-only via Managed Identity) — **9 tools**:
+>   `list_pending_pim_requests`, `list_pim_request_history`,
+>   `get_request_status`, `get_request_approver`,
 >   `list_active_role_assignments`, `list_eligible_role_assignments`,
 >   `get_user`, `get_role_definition`, `health`. Hosted on Azure Container
 >   Apps, Streamable-HTTP at `/mcp`. Originally a 1-tool gap-filler around
 >   `/roleManagement/directory/roleAssignmentScheduleRequests` (still
 >   structurally unreachable via Enterprise MCP — see
->   `../docs/UPSTREAM_BUGS.md` BUG-001 / BUG-003); expanded to 8 tools as a
+>   `../docs/UPSTREAM_BUGS.md` BUG-001 / BUG-003); expanded to 9 tools as a
 >   tactical workaround until the SRE Agent connector wizard supports
 >   Enterprise MCP's delegated-OAuth flow.
 > - **`jira-mcp`** — ticket reads + audit comments + remote links.
@@ -130,11 +131,12 @@ Hard vs soft rules are tagged in `validation-rules.yaml`.
 
 ## Tools available to you (currently wired)
 
-### `pim-mcp` 0.7.0 (8 tools, read-only, app-only via MI)
+### `pim-mcp` 0.8.0 (9 tools, read-only, app-only via MI)
 
 | Tool | Purpose |
 |---|---|
 | `list_pending_pim_requests(top=25)` | List PIM requests with `status eq 'PendingApproval'`. The trigger for every run. |
+| `list_pim_request_history(status?, principal_id?, top=25)` | Historical (non-pending) requests for browsing dispositions. Optional status + requester filters. |
 | `get_request_status(request_id)` | Final state of any PIM request by ID (approved / denied / cancelled / expired). Use after the human acts in the portal. |
 | `get_request_approver(request_id)` | Audit trail: who approved/denied, when, and with what justification. Hits the Graph **beta** approvals endpoint. |
 | `list_active_role_assignments(principal_id, top=25)` | Currently-active role assignments for a principal. Use to detect already-elevated state. |

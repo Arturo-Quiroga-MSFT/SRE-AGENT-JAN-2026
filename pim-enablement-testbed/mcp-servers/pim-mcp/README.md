@@ -1,8 +1,8 @@
 # PIM MCP Server — read-only Graph proxy (ACTIVE)
 
-> **Status: ACTIVE as of May 8, 2026.** Image **0.7.0**. Streamable-HTTP at `/mcp`.
-> Eight tools: `list_pending_pim_requests`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_role_definition`, `health`.
-> Uses **app-only** Graph auth via Managed Identity. One tool (`get_request_approver`) hits the Graph **beta** endpoint; the other seven are v1.0.
+> **Status: ACTIVE as of May 8, 2026.** Image **0.8.0**. Streamable-HTTP at `/mcp`.
+> Nine tools: `list_pending_pim_requests`, `list_pim_request_history`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_role_definition`, `health`.
+> Uses **app-only** Graph auth via Managed Identity. One tool (`get_request_approver`) hits the Graph **beta** endpoint; the other eight are v1.0.
 >
 > **Scope expanded May 8, 2026** beyond the original 1-tool gap-filler. The SRE Agent's MCP connector wizard does not yet support delegated-OAuth, which blocks wiring Microsoft's Enterprise MCP server. We extended this server with a minimal user/role-resolver surface plus request-disposition, active-assignment, and approver-audit lookups as a tactical workaround. Track the strategic fix (OAuth in the wizard) and contract this server back to its original 1-tool gap-filler scope when Enterprise MCP becomes wireable.
 
@@ -51,6 +51,7 @@ This server uses a Managed Identity (app-only) to read pending requests.
 | Tool | Purpose |
 |---|---|
 | `list_pending_pim_requests(top=25)` | List PIM requests with `status eq 'PendingApproval'`. Returns ID, principal/role/scope, justification, ticket info, schedule. Response includes a `hint` directing the agent to the disposition / approver / active-assignment tools for follow-ups. |
+| `list_pim_request_history(status?, principal_id?, top=25)` | Browse historical (non-pending) requests — Provisioned, Denied, Cancelled, Expired, etc. Optional status + requester filters. **Added 0.8.0** to close the "browse all requests" gap (Graph holds full history; `list_pending_pim_requests` only surfaced the PendingApproval subset). Same Graph permission as the pending-requests tool, so no new app-role grant. Sorted newest-first. |
 | `get_request_status(request_id)` | Get the current state of any PIM request by ID — closes the disposition gap (approved / denied / cancelled / expired) for requests no longer in PendingApproval. |
 | `get_request_approver(request_id)` | Audit trail: who approved/denied the request, when, and with what justification. Hits the Graph **beta** approvals endpoint (`/roleManagement/directory/roleAssignmentApprovals/{id}/steps`). Returns the full `steps` array (multi-stage approval policies return multiple rows). |
 | `list_active_role_assignments(principal_id, top=25)` | List currently-active role assignments for a principal from `roleAssignmentScheduleInstances`. Use post-approval to verify a requester actually holds the role. |
