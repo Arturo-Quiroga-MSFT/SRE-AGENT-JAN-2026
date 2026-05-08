@@ -70,6 +70,12 @@ $tierExpected = @{
         'MCP.Policy.Read.All',
         'MCP.Device.Read.All'
     )
+    'Tier 4 (security & risk)' = @(
+        'MCP.SecurityAlert.Read.All',
+        'MCP.SecurityIncident.Read.All',
+        'MCP.IdentityRiskyUser.Read.All',
+        'MCP.ServiceHealth.Read.All'
+    )
 }
 
 $published = $scopes.Value

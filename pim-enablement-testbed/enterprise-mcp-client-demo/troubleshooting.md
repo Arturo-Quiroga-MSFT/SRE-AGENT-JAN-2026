@@ -96,7 +96,11 @@ $names = @(
     'MCP.Group.Read.All',
     'MCP.Application.Read.All',
     'MCP.Policy.Read.All',
-    'MCP.Device.Read.All'
+    'MCP.Device.Read.All',
+    'MCP.SecurityAlert.Read.All',
+    'MCP.SecurityIncident.Read.All',
+    'MCP.IdentityRiskyUser.Read.All',
+    'MCP.ServiceHealth.Read.All'
 )
 Revoke-EntraBetaMCPServerPermission -ApplicationName 'VisualStudioCode' -Scopes $names
 ```

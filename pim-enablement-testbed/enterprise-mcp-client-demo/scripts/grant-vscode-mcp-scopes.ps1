@@ -9,18 +9,20 @@
       1 = PIM core
       2 = identity context
       3 = SRE / audit broadening (Zafin-friendly extension)
+      4 = security & risk (Defender, Identity Protection, ServiceHealth)
 
-    ALWAYS run discover-mcp-scopes.ps1 first to confirm Tier 3 names are
-    actually published in the target tenant. Edit $Tier3 below if the
-    discovery script reports MISSING scopes.
+    All four tier name sets were verified live in MngEnvMCAP094150 on
+    2026-05-08 via discover-mcp-scopes.ps1. Re-run discovery in any
+    other tenant before granting.
 
 .PARAMETER Tier
     Comma-separated list of tier numbers to grant. Default: 1,2.
 
 .EXAMPLE
-    pwsh ./grant-vscode-mcp-scopes.ps1                  # PIM minimum
-    pwsh ./grant-vscode-mcp-scopes.ps1 -Tier 1,2,3      # Full SRE set
-    pwsh ./grant-vscode-mcp-scopes.ps1 -Tier 1          # Roles only
+    pwsh ./grant-vscode-mcp-scopes.ps1                    # PIM minimum
+    pwsh ./grant-vscode-mcp-scopes.ps1 -Tier 1,2,3        # SRE set
+    pwsh ./grant-vscode-mcp-scopes.ps1 -Tier 1,2,3,4      # Full security-aware set
+    pwsh ./grant-vscode-mcp-scopes.ps1 -Tier 1            # Roles only
 
 .NOTES
     Requires: PowerShell 7+, Microsoft.Entra.Beta >= 1.0.13, tenant
@@ -35,6 +37,9 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
+# All scope names verified live in MngEnvMCAP094150 on 2026-05-08.
+# Re-run discover-mcp-scopes.ps1 in any other tenant before granting.
+
 $Tier1 = @(
     'MCP.RoleManagement.Read.Directory',
     'MCP.RoleEligibilitySchedule.Read.Directory',
@@ -48,7 +53,6 @@ $Tier2 = @(
     'MCP.Organization.Read.All'
 )
 
-# EDIT after running discover-mcp-scopes.ps1 if any name is reported MISSING.
 $Tier3 = @(
     'MCP.AuditLog.Read.All',
     'MCP.Group.Read.All',
@@ -57,10 +61,18 @@ $Tier3 = @(
     'MCP.Device.Read.All'
 )
 
+$Tier4 = @(
+    'MCP.SecurityAlert.Read.All',
+    'MCP.SecurityIncident.Read.All',
+    'MCP.IdentityRiskyUser.Read.All',
+    'MCP.ServiceHealth.Read.All'
+)
+
 $selected = @()
 if ($Tier -contains 1) { $selected += $Tier1 }
 if ($Tier -contains 2) { $selected += $Tier2 }
 if ($Tier -contains 3) { $selected += $Tier3 }
+if ($Tier -contains 4) { $selected += $Tier4 }
 $selected = $selected | Sort-Object -Unique
 
 Write-Host "==> Tiers requested: $($Tier -join ', ')" -ForegroundColor Cyan

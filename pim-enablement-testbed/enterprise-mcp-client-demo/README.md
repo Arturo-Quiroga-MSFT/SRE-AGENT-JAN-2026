@@ -39,7 +39,9 @@ Confirm before starting:
 
 ## Recommended scope set
 
-We define three tiers. Tier 1 + 2 are the PIM-Enablement minimum. Tier 3 broadens the agent from PIM-only into general identity-aware SRE, which Zafin and other customers will want as next steps.
+We define **four tiers**. Tier 1 + 2 are the PIM-Enablement minimum. Tier 3 broadens the agent from PIM-only into general identity-aware SRE. Tier 4 adds security-signal context (Defender, Identity Protection, service health) that turns the same agent into a first-pass incident triager.
+
+> **Verified live 2026-05-08:** all 17 scope names below are published and enabled on the MCP Server SP in tenant `MngEnvMCAP094150` (40 published scopes total). Run [`scripts/discover-mcp-scopes.ps1`](scripts/discover-mcp-scopes.ps1) to re-verify in any other tenant before granting.
 
 ### Tier 1 — PIM core (required for the testbed)
 
@@ -60,7 +62,7 @@ We define three tiers. Tier 1 + 2 are the PIM-Enablement minimum. Tier 3 broaden
 
 ### Tier 3 — SRE / audit broadening (recommended for Zafin)
 
-| Scope (probable name) | Why it pays off |
+| Scope | Why it pays off |
 |---|---|
 | `MCP.AuditLog.Read.All` | Sign-in logs + directory audits — central to RCA ("did this user actually sign in around the incident time?") |
 | `MCP.Group.Read.All` | Full group metadata (not just members) — useful for ownership / dynamic-membership reasoning |
@@ -68,7 +70,14 @@ We define three tiers. Tier 1 + 2 are the PIM-Enablement minimum. Tier 3 broaden
 | `MCP.Policy.Read.All` | Conditional Access + auth-method policies — answers "why was this user blocked?" |
 | `MCP.Device.Read.All` | Intune-managed device posture — answers "is the requester on a compliant device?" |
 
-> **Important:** scope names must be discovered live in the target tenant before granting. Tier 1 + 2 names were verified in `MngEnvMCAP094150` on 2026-05-04. Tier 3 names are educated guesses based on Microsoft's naming convention (`MCP.<Graph-resource>.Read.<Directory|All>`). **Run the discovery script first, then edit the grant script to match.**
+### Tier 4 — Security & Risk (incident triage)
+
+| Scope | Why it pays off |
+|---|---|
+| `MCP.SecurityAlert.Read.All` | Defender alerts in agent context — direct RCA fuel for active incidents |
+| `MCP.SecurityIncident.Read.All` | Defender XDR correlated incidents (alerts grouped by attack story) |
+| `MCP.IdentityRiskyUser.Read.All` | Identity Protection "is this requester flagged risky?" |
+| `MCP.ServiceHealth.Read.All` | "Is this an Azure-side outage before we escalate to the app team?" |
 
 ---
 
@@ -85,10 +94,10 @@ Outputs a table of all enabled, non-private published scopes on the MCP Server S
 ### Step 2 — Grant scopes to the VS Code built-in client (2 min)
 
 ```powershell
-./scripts/grant-vscode-mcp-scopes.ps1 -Tier 1,2,3
+./scripts/grant-vscode-mcp-scopes.ps1 -Tier 1,2,3,4
 ```
 
-`-Tier 1,2` for PIM-only minimum; `-Tier 1,2,3` for the full SRE-broadening set. The script uses `Grant-EntraBetaMCPServerPermission -ApplicationName VisualStudioCode` so no app registration is needed.
+`-Tier 1,2` for PIM-only minimum; `-Tier 1,2,3` for SRE broadening; `-Tier 1,2,3,4` for the full security-aware set. The script uses `Grant-EntraBetaMCPServerPermission -ApplicationName VisualStudioCode` so no app registration is needed.
 
 ### Step 3 — Wire the MCP servers into VS Code (1 min)
 
@@ -115,6 +124,7 @@ Open Copilot Chat (Agent Mode) and run the prompts in [`prompts/`](prompts/) in 
 | 3 | [`03-role-policy.md`](prompts/03-role-policy.md) | same | Approval policy reasoning |
 | 4 | [`04-hybrid-pending.md`](prompts/04-hybrid-pending.md) | `enterprise-mcp` *and* `pim-mcp.list_pending_pim_requests` | **Hybrid architecture in action** — the showpiece |
 | 5 | [`05-signin-rca.md`](prompts/05-signin-rca.md) | `enterprise-mcp` (Tier 3) | SRE broadening — only works if Tier 3 granted |
+| 6 | [`06-incident-triage.md`](prompts/06-incident-triage.md) | `enterprise-mcp` (Tier 4) | Security incident triage — only works if Tier 4 granted |
 
 ---
 
@@ -148,6 +158,7 @@ enterprise-mcp-client-demo/
 │   ├── 02-active-assignments.md
 │   ├── 03-role-policy.md
 │   ├── 04-hybrid-pending.md          # The hybrid showpiece
-│   └── 05-signin-rca.md              # Tier 3 only
+│   ├── 05-signin-rca.md              # Tier 3 only
+│   └── 06-incident-triage.md         # Tier 4 only
 └── troubleshooting.md
 ```
