@@ -37,8 +37,13 @@
                                        |                              also calls (app-only)
                                        |                                          v
                                        |       [pim-mcp ACA] --(read, app)--> [Entra PIM]
-                                       |       (single tool: list_pending_pim_requests)
-                                       |       (Graph app role: RoleAssignmentSchedule.Read.Directory)
+                                       |       (7 read tools: list_pending_pim_requests,
+                                       |        get_request_status, get_request_approver,
+                                       |        list_active_role_assignments, get_user,
+                                       |        get_role_definition, health)
+                                       |       (Graph app roles: RoleAssignmentSchedule.{Read,ReadWrite}.Directory,
+                                       |        User.Read.All, RoleManagement.Read.Directory,
+                                       |        PrivilegedAccess.Read.AzureAD)
                                        v                                          |
                               (Approves in PIM portal)         (Posts Adaptive Card via Teams webhook)
                                                                                   |
@@ -54,7 +59,7 @@ already provides audit logging.
 
 | Action | Mechanism | Risk control |
 |---|---|---|
-| Read pending PIM requests (`status eq 'PendingApproval'`) | **Custom `pim-mcp` Container App** → Graph (app-only via MI, single tool) | MI granted `RoleAssignmentSchedule.ReadWrite.Directory` Graph app role (forced by Graph runtime — see top-of-file note); the MCP server source contains no write tool, so the agent cannot exercise the write half of the scope; client-side `status == 'PendingApproval'` filter (Graph rejects `$filter` and `$orderby` on this collection) |
+| Read pending PIM requests (`status eq 'PendingApproval'`) | **Custom `pim-mcp` Container App** → Graph (app-only via MI, 7 read tools) | MI granted `RoleAssignmentSchedule.ReadWrite.Directory` Graph app role (forced by Graph runtime — see top-of-file note) plus four narrow read scopes (`RoleAssignmentSchedule.Read.Directory`, `User.Read.All`, `RoleManagement.Read.Directory`, `PrivilegedAccess.Read.AzureAD`); the MCP server source contains no write tool, so the agent cannot exercise the write half of the scope; client-side `status == 'PendingApproval'` filter (Graph rejects `$filter` and `$orderby` on this collection) |
 | Read PIM schedules / eligibilities / users / groups / licenses | Enterprise MCP → Graph (delegated, read-only scopes) | Service-account user has only `MCP.*Read.*` scopes; no write scopes granted |
 | Read Jira tickets | Jira MCP (read) | Existing PoC pattern, scoped API token |
 | Write Jira comments | Jira MCP (comment-only) | Audit-write only; cannot transition tickets |
@@ -64,7 +69,7 @@ already provides audit logging.
 
 | Action | Why it can't |
 |---|---|
-| Approve a PIM request | Enterprise MCP server is read-only in current preview; **the custom `pim-mcp` server has no write tool implemented** — only `list_pending_pim_requests` and `health` are registered. (Note: the MI's Graph app role is `ReadWrite.Directory` because Graph runtime requires it for the LIST call, but the agent cannot reach a write code path.) |
+| Approve a PIM request | Enterprise MCP server is read-only in current preview; **the custom `pim-mcp` server registers only seven read tools** (`list_pending_pim_requests`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `get_user`, `get_role_definition`, `health`) — no write tool exists. (Note: the MI's Graph app role is `ReadWrite.Directory` because Graph runtime requires it for the LIST call, but the agent cannot reach a write code path.) |
 | Deny a PIM request | Same |
 | Modify a PIM eligibility | Service-account user has only read scopes; the MI **could** technically reach Graph write endpoints with its `ReadWrite.Directory` token, but the `pim-mcp` server registers no tool that would expose that capability. PR review on the server source is the control. |
 | Activate roles for itself | Service account is PIM-eligible only for read-only roles (Reader, Monitoring Reader); MI has no PIM eligibilities |

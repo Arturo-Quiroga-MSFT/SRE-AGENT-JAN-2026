@@ -21,7 +21,7 @@ export PREFIX="pimtest"
 export TENANT_ID="<your-test-tenant-id>"
 export SVC_ACCOUNT_UPN="svc-pim-enablement-agent@<tenant>"
 export ACR_NAME="<your-acr>"                  # for the gap-filler pim-mcp image
-export PIM_MCP_IMAGE="$ACR_NAME.azurecr.io/pim-mcp:0.2.0"
+export PIM_MCP_IMAGE="$ACR_NAME.azurecr.io/pim-mcp:0.6.1"
 ```
 
 ## 1. Provision the Microsoft MCP Server for Enterprise (one-time per tenant)
@@ -46,7 +46,7 @@ pwsh ./scripts/provision-enterprise-mcp.ps1 `
 First, build and push the gap-filler `pim-mcp` image:
 
 ```bash
-az acr build -r "$ACR_NAME" -t "pim-mcp:0.2.0" mcp-servers/pim-mcp
+az acr build -r "$ACR_NAME" -t "pim-mcp:0.6.1" mcp-servers/pim-mcp
 ```
 
 Then deploy:
@@ -94,11 +94,16 @@ runtime). The compensating control: the `pim-mcp` server registers no
 write tools — the elevated token is latent only. Required for `pim-mcp`
 to call `/roleManagement/directory/roleAssignmentScheduleRequests`.
 
-> **Propagation lag (operational).** After this grant the resource-side
-> claim cache can take **5–60+ minutes** to honor the new role. If step 5
-> smoke test returns `403 PermissionScopeNotGranted`, wait and retry —
-> `az containerapp revision restart -n ca-${PREFIX}-pimmcp -g $RG_NAME`
-> forces a fresh IMDS token but does NOT shorten the Graph-side cache.
+> **Token-cache trap (operational — fixed in 0.6.1).** The Container Apps
+> IMDS sidecar caches MI tokens by `(client_id, resource)` for the full
+> token lifetime. Newly-granted appRoles do **not** appear in cached
+> tokens until natural refresh near expiry (hours away). `pim-mcp` 0.6.1+
+> works around this by hitting `IDENTITY_ENDPOINT` directly with
+> `bypass_cache=true`; **after granting any new appRole, run
+> `az containerapp revision restart -n ca-${PREFIX}-pimmcp -g $RG_NAME`**
+> to clear the in-process token cache. The bypass-cache path then picks
+> up fresh claims immediately. If you see `403 PermissionScopeNotGranted`
+> from `pim-mcp` right after a grant, this is the cause.
 
 ## 3. Seed test users + groups + PIM-eligible assignments
 
@@ -120,12 +125,15 @@ into `agent/validation-rules.yaml`.
      - Sign in as `$SVC_ACCOUNT_UPN` to grant initial consent
      - Used for: schedules, eligibilities, users, groups, licenses, org info
    - **PIM MCP (gap-filler)** — `pimMcpEndpoint` Bicep output (e.g.
-     `https://ca-pimtest-pimmcp.<region>.azurecontainerapps.io`)
-     - Transport: SSE (FastMCP default)
+     `https://ca-pimtest-pimmcp.<region>.azurecontainerapps.io/mcp`)
+     - Transport: **Streamable-HTTP** at `/mcp` (FastMCP `transport="streamable-http"`, explicit `path="/mcp"`).
      - Auth: anonymous from Foundry's perspective; the `pim-mcp` Container App
        authenticates to Graph using its own MI. Restrict ingress to the
        Foundry connector subnet/IP range.
-     - Used for: `list_pending_pim_requests` (the trigger)
+     - Used for: read-side coverage of the PIM request lifecycle — 7 tools:
+       `list_pending_pim_requests`, `get_request_status`,
+       `get_request_approver`, `list_active_role_assignments`, `get_user`,
+       `get_role_definition`, `health`.
    - **Jira MCP** — existing endpoint from Jan PoC
    - **Teams Webhook** — Logic App / Azure Function poster wrapping the
      Incoming Webhook URL

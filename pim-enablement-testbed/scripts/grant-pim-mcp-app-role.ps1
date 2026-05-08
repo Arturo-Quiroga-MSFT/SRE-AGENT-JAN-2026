@@ -34,7 +34,14 @@ param(
         # Read is what the docs SAY is sufficient. Kept so this script becomes
         # a no-op when Microsoft fixes the runtime; you can then remove the
         # ReadWrite grant manually.
-        'RoleAssignmentSchedule.Read.Directory'
+        'RoleAssignmentSchedule.Read.Directory',
+        # Required by `get_user` (resolves principalId -> displayName/UPN).
+        'User.Read.All',
+        # Required by `get_role_definition` (resolves roleDefinitionId -> name).
+        'RoleManagement.Read.Directory',
+        # Required by `get_request_approver` (Graph beta
+        # /roleManagement/directory/roleAssignmentApprovals/{id}/steps).
+        'PrivilegedAccess.Read.AzureAD'
     )
 )
 
