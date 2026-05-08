@@ -1,6 +1,6 @@
 # PIM MCP Server — read-only Graph proxy (ACTIVE)
 
-> **Status: ACTIVE as of May 8, 2026.** Image **0.6.0**. Streamable-HTTP at `/mcp`.
+> **Status: ACTIVE as of May 8, 2026.** Image **0.6.1**. Streamable-HTTP at `/mcp`.
 > Seven tools: `list_pending_pim_requests`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `get_user`, `get_role_definition`, `health`.
 > Uses **app-only** Graph auth via Managed Identity. One tool (`get_request_approver`) hits the Graph **beta** endpoint; the other six are v1.0.
 >
@@ -96,7 +96,7 @@ AZURE_CLIENT_ID=<mi-client-id> uv run python server.py
 
 ```bash
 # from repo root
-az acr build -r <acr-name> -t pim-mcp:0.6.0 mcp-servers/pim-mcp
+az acr build -r <acr-name> -t pim-mcp:0.6.1 mcp-servers/pim-mcp
 ```
 
 Then set `pimMcpImage` parameter when running `azd up` /
