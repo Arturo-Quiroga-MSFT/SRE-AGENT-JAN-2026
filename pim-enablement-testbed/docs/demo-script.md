@@ -8,7 +8,7 @@
 1. Deploy infra: `azd up` (or `az deployment sub create -f infra/main.bicep`).
 2. Grant Graph perms to the agent MI: `pwsh scripts/grant-graph-perms.ps1` (TODO).
 3. Seed test users + groups: `pwsh scripts/seed-test-users.ps1`.
-4. Configure Foundry agent with `agent/knowledge.md` and the three MCP endpoints.
+4. Configure Azure SRE Agent with `agent/knowledge.md` and the three MCP endpoints.
 5. Validate end-to-end with `scripts/verify-deployment.sh`.
 
 ## Demo flow

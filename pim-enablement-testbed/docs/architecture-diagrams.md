@@ -118,11 +118,12 @@ sequenceDiagram
 
 ## 3. Tool surface — Enterprise MCP vs `pim-mcp` coverage
 
-Where each PIM concept is reachable from. This is the picture that justifies the hybrid design.
+Where each PIM concept the agent needs is reachable from. This is the picture that justifies the hybrid design — read top-to-bottom: each concept lists the tool(s) that satisfy it, and the one red gap (`PendingApproval requests`) is the structural reason `pim-mcp` exists.
 
 ```mermaid
-flowchart TB
-    subgraph Concepts["PIM concepts the agent needs"]
+flowchart LR
+    subgraph Concepts["PIM concept the agent needs"]
+        direction TB
         c1[Eligibility schedules]
         c2[Active assignments]
         c3[Role definitions]
@@ -132,44 +133,30 @@ flowchart TB
         c7[Audit trail / Jira]
     end
 
-    subgraph EntMCP["via Enterprise MCP<br/>(delegated, Read.* only)"]
-        e1[microsoft_graph_get]
-        e2[microsoft_graph_<br/>suggest_queries]
-        e3[microsoft_graph_<br/>list_properties]
+    subgraph Coverage["Tool that satisfies it"]
+        direction TB
+        r1["Enterprise MCP &nbsp;·&nbsp; <code>microsoft_graph_get</code>"]
+        r2["Enterprise MCP &nbsp;or&nbsp; pim-mcp <code>list_active_role_assignments</code>"]
+        r3["Enterprise MCP &nbsp;or&nbsp; pim-mcp <code>get_role_definition</code>"]
+        r4["Enterprise MCP &nbsp;or&nbsp; pim-mcp <code>get_user</code>"]
+        r5["<b>pim-mcp <code>list_pending_pim_requests</code></b><br/><i>(only working path — Enterprise MCP returns 403)</i>"]
+        r6["pim-mcp <code>get_request_approver</code> + <code>get_request_status</code>"]
+        r7["jira-mcp &nbsp;·&nbsp; create / comment / remotelink"]
     end
 
-    subgraph PimMCP["via pim-mcp<br/>(app-only, MI)"]
-        p1[list_pending_pim_requests]
-        p2[get_request_status]
-        p3[get_request_approver]
-        p4[list_active_role_assignments]
-        p5[get_user]
-        p6[get_role_definition]
-        p7[health]
-    end
-
-    subgraph JiraMCP["via jira-mcp"]
-        j1[create / comment / remotelink]
-    end
-
-    c1 --> e1
-    c2 --> e1
-    c2 --> p4
-    c3 --> e1
-    c3 --> p6
-    c4 --> e1
-    c4 --> p5
-    c5 -.->|❌ 403| e1
-    c5 ==>|✅ only path| p1
-    c6 --> p3
-    c6 --> p2
-    c7 --> j1
+    c1 --> r1
+    c2 --> r2
+    c3 --> r3
+    c4 --> r4
+    c5 ==> r5
+    c6 --> r6
+    c7 --> r7
 
     classDef gap stroke:#c62828,stroke-width:3px,color:#c62828
-    class c5,p1 gap
+    class c5,r5 gap
 ```
 
-**Legend:** dotted red = blocked by upstream gap; thick green-routed arrow = the only working path. Everything else has either Enterprise MCP coverage, redundant `pim-mcp` coverage, or both.
+**Legend:** thick green-routed arrow on `PendingApproval requests` = the only working path because Enterprise MCP doesn't publish the required `RoleAssignmentSchedule.ReadWrite.Directory` delegated scope ([UPSTREAM_BUGS BUG-001](UPSTREAM_BUGS.md)). Every other concept has Enterprise MCP coverage, redundant `pim-mcp` coverage, or both — which is why we kept `pim-mcp` deliberately small (7 read-only tools).
 
 ---
 
@@ -229,47 +216,47 @@ flowchart LR
 
 ## 5. Repository layout
 
-The pieces that make up the testbed and how they relate.
+The pieces that make up the testbed and how they relate. Rendered as a Mermaid mindmap so it scales well on portrait screens.
 
 ```mermaid
-flowchart TB
-    Root["pim-enablement-testbed/"]
-    Root --> RM[README.md<br/><i>top-level status</i>]
-    Root --> Plan[test-plan-May-5-2026.md]
-    Root --> Res[test-results-May-5-2026.md]
-
-    Root --> MCPS["mcp-servers/<br/>pim-mcp/"]
-    MCPS --> SRC[src/server.py<br/><i>FastMCP, 7 tools</i>]
-    MCPS --> Df[Dockerfile]
-
-    Root --> Inf["infra/"]
-    Inf --> Bicep[pim-mcp-aca.bicep<br/><i>ACA + MI + RBAC</i>]
-
-    Root --> Scripts["scripts/"]
-    Scripts --> Trig[trigger-pim-activation.ps1]
-    Scripts --> Cfg[configure-pim-approval.ps1]
-
-    Root --> Agent["agent/"]
-    Agent --> Rules[validation-rules.yaml<br/><i>R001–R007</i>]
-
-    Root --> Demo["enterprise-mcp-client-demo/"]
-    Demo --> DemoRM[README.md]
-    Demo --> Vscode[vscode/mcp.json]
-    Demo --> DemoScripts[scripts/<br/>discover · grant · verify]
-    Demo --> DemoPrompts[prompts/01–06]
-    Demo --> Trouble[troubleshooting.md]
-
-    Root --> Docs["docs/"]
-    Docs --> EntSetup[enterprise-mcp-setup.md]
-    Docs --> ToolsRef[pim-tools-via-enterprise-mcp.md]
-    Docs --> Bugs[UPSTREAM_BUGS.md]
-    Docs --> Threat[threat-model.md]
-    Docs --> DeployRB[deployment-runbook.md]
-    Docs --> DemoSc[demo-script.md]
-    Docs --> Diag[<b>architecture-diagrams.md</b><br/><i>← you are here</i>]
-
-    classDef here fill:#fff59d,stroke:#f57f17,color:#000
-    class Diag here
+mindmap
+  root((pim-enablement-testbed/))
+    README.md
+      top-level status
+    test-plan-May-5-2026.md
+    test-results-May-5-2026.md
+    mcp-servers/pim-mcp/
+      src/server.py
+        FastMCP · 7 tools
+      Dockerfile
+    infra/
+      pim-mcp-aca.bicep
+        ACA + MI + RBAC
+    scripts/
+      trigger-pim-activation.ps1
+      configure-pim-approval.ps1
+    agent/
+      validation-rules.yaml
+        R001–R007
+      knowledge.md
+    enterprise-mcp-client-demo/
+      README.md
+      vscode/mcp.json
+      scripts/
+        discover-mcp-scopes.ps1
+        grant-vscode-mcp-scopes.ps1
+        verify-mcp-token.ps1
+      prompts/01–06
+      troubleshooting.md
+    docs/
+      enterprise-mcp-setup.md
+      pim-tools-via-enterprise-mcp.md
+      UPSTREAM_BUGS.md
+      threat-model.md
+      deployment-runbook.md
+      demo-script.md
+      architecture-diagrams.md
+        ← you are here
 ```
 
 ---

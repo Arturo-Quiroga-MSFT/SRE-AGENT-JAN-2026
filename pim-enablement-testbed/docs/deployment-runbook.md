@@ -74,7 +74,7 @@ Expected outputs:
 
 > Skip the gap-filler by omitting `pimMcpImage`. The infra still deploys but
 > the agent will lack pending-request visibility — only useful if you
-> intentionally want a Foundry-only smoke test.
+> intentionally want a SRE-Agent-only smoke test.
 
 ### 2a. Grant the agent MI the Graph app roles for `pim-mcp`
 
@@ -114,9 +114,9 @@ pwsh ./scripts/seed-test-users.ps1 -TenantId $TENANT_ID
 Capture the resulting user object IDs and group object IDs — paste them
 into `agent/validation-rules.yaml`.
 
-## 4. Wire the Foundry SRE Agent
+## 4. Wire the Azure SRE Agent
 
-1. Create a new agent in the Foundry workspace.
+1. Provision a new Azure SRE Agent (`aq-main`) in the Azure portal.
 2. Paste `agent/knowledge.md` into the Knowledge section.
 3. Add MCP connectors:
    - **Enterprise MCP Server** — `https://mcp.svc.cloud.microsoft/enterprise`
@@ -127,9 +127,9 @@ into `agent/validation-rules.yaml`.
    - **PIM MCP (gap-filler)** — `pimMcpEndpoint` Bicep output (e.g.
      `https://ca-pimtest-pimmcp.<region>.azurecontainerapps.io/mcp`)
      - Transport: **Streamable-HTTP** at `/mcp` (FastMCP `transport="streamable-http"`, explicit `path="/mcp"`).
-     - Auth: anonymous from Foundry's perspective; the `pim-mcp` Container App
+     - Auth: anonymous from the SRE Agent's perspective; the `pim-mcp` Container App
        authenticates to Graph using its own MI. Restrict ingress to the
-       Foundry connector subnet/IP range.
+       Azure SRE Agent connector subnet/IP range.
      - Used for: read-side coverage of the PIM request lifecycle — 7 tools:
        `list_pending_pim_requests`, `get_request_status`,
        `get_request_approver`, `list_active_role_assignments`, `get_user`,
@@ -139,7 +139,7 @@ into `agent/validation-rules.yaml`.
      Incoming Webhook URL
 4. Configure scheduled trigger: every 60s, calling `pim-mcp → list_pending_pim_requests`.
 
-Reference for the Foundry connector setup:
+Reference for an alternate Microsoft Foundry-based wiring (parallel scenario, not our Azure SRE Agent path):
 <https://learn.microsoft.com/graph/mcp-server/use-enterprise-mcp-server-microsoft-foundry>
 
 ## 5. Verify

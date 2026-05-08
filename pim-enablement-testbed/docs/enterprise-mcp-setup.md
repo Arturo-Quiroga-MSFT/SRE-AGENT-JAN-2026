@@ -143,7 +143,7 @@ Recommended posture:
 Provisioning script: [`../scripts/provision-enterprise-mcp.ps1`](../scripts/provision-enterprise-mcp.ps1)
 (scaffold).
 
-### Foundry agent connector
+### Azure SRE Agent connector
 
 In the Foundry workspace:
 

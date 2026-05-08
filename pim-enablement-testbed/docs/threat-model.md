@@ -31,7 +31,7 @@
 [Requester] --(self-service)--> [Entra PIM] <--(read, delegated)-- [Enterprise MCP (Microsoft-hosted)]
                                        ^                                          ^
                                        |                                          |
-                                   [Approver]                              [SRE Agent (Foundry)]
+                                   [Approver]                              [Azure SRE Agent]
                                        |                              signed in as svc-pim-enablement-agent
                                        |                                          |
                                        |                              also calls (app-only)
@@ -108,7 +108,7 @@ already provides audit logging.
      `health` tool; no write code path exists. PR review + branch protection
      on `mcp-servers/pim-mcp/**` is the primary control.
    - The MI is single-purpose (only attached to the `pim-mcp` Container App).
-   - Container App ingress is restricted to the Foundry connector subnet.
+   - Container App ingress is restricted to the Azure SRE Agent connector subnet.
    - Container image is pinned by digest in production.
    - Microsoft Graph activity logs filtered on the MI's `AppId` will show any
      write attempt (none expected).

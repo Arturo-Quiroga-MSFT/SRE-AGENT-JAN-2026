@@ -1,6 +1,6 @@
 # SRE Agent — Chat Transcripts
 
-Curated transcripts of Foundry SRE Agent (`aq-main`) sessions exercising the `pim-mcp` + `jira-mcp` connectors during the PIM enablement testbed.
+Curated transcripts of Azure SRE Agent (`aq-main`) sessions exercising the `pim-mcp` + `jira-mcp` connectors during the PIM enablement testbed.
 
 Each file follows the same shape:
 
@@ -26,7 +26,7 @@ Quantitative pass/fail criteria, latency, and step-by-step evidence live in [`..
 
 ## Adding a new transcript
 
-1. Copy the latest agent reply from the Foundry portal session.
+1. Copy the latest agent reply from the Azure portal session.
 2. Save as `N.md` (next sequential number).
 3. Reformat to the shared structure — easiest path is to ask Copilot:
    > _"reformat this md file like 1.md / 2.md format for readability"_
@@ -35,6 +35,6 @@ Quantitative pass/fail criteria, latency, and step-by-step evidence live in [`..
 
 ## What these transcripts are not
 
-- **Not a substitute for Foundry traces.** Use the portal trace view for full per-call latency and payloads (Step 10 in the test results doc).
+- **Not a substitute for Azure portal traces.** Use the portal trace view for full per-call latency and payloads (Step 10 in the test results doc).
 - **Not load-test data.** Each transcript is a single human-prompted session, not a synthetic-traffic measurement.
 - **Not redacted automatically.** Tenant id, MI client id, role definition ids, and test-user UPNs appear in plain text. The testbed tenant (`MngEnvMCAP094150.onmicrosoft.com`) is throwaway by design — do not paste production transcripts here without scrubbing.

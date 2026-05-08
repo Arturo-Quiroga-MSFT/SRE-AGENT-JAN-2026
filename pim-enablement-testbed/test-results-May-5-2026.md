@@ -18,7 +18,7 @@ audience: Internal — Zafin engagement decision input
 | `pim-mcp` image | `0.4.1` (was `0.2.4` on May 5) |
 | MCP transport | **Streamable-HTTP** at `/mcp` (was SSE at `/sse` on May 5 — see Day 2 roadblock removers) |
 | `pim-mcp` tools | `list_pending_pim_requests`, `health`, `get_user`, `get_role_definition` (4) |
-| Foundry SRE agent | `aq-main` (subscription `7a28b21e-…`, RG `rg-aqsre`) |
+| Azure SRE Agent | `aq-main` (subscription `7a28b21e-…`, RG `rg-aqsre`) |
 | Test role | `Privileged Role Administrator` (or substitute) |
 | Operator UPN | `arturoqu@MngEnvMCAP094150.onmicrosoft.com` (admin) |
 | Requester UPN | `pim-requester@MngEnvMCAP094150.onmicrosoft.com` |
@@ -58,7 +58,7 @@ Smoke test from CLI succeeded against the new transport. Gap-filler now serves a
 
 ---
 
-## Step 1 — Wire `pim-mcp` into the SRE agent in Foundry — ✅ PASS (2026-05-08)
+## Step 1 — Wire `pim-mcp` into the Azure SRE Agent — ✅ PASS (2026-05-08)
 
 **Final wiring values (in `aq-main` SRE Agent → Connectors → Add MCP):**
 
@@ -70,7 +70,7 @@ Smoke test from CLI succeeded against the new transport. Gap-filler now serves a
 | Authentication | Bearer token, value `not-required` (server doesn't validate; placeholder satisfies wizard) |
 | Tools selected | All 4 (`list_pending_pim_requests`, `health`, `get_user`, `get_role_definition`) |
 
-**Pass criteria:** Tool discovered in Foundry portal; visible in agent's tool list.
+**Pass criteria:** Tool discovered in Azure portal; visible in agent's tool list.
 
 **Result:**
 - [x] Pass / [ ] Fail
@@ -79,7 +79,7 @@ Smoke test from CLI succeeded against the new transport. Gap-filler now serves a
 
 ### Roadblock removers (May 7–8 Day 2)
 
-1. **Transport mismatch (May 7).** Foundry's SRE Agent MCP connector wizard only supports **Streamable-HTTP**, NOT SSE. `pim-mcp` 0.2.4 was running `transport="sse"` (only `/sse` exposed). Confirmed via curl: `GET /mcp → 404`, only `/sse → 200`.
+1. **Transport mismatch (May 7).** The Azure SRE Agent's MCP connector wizard only supports **Streamable-HTTP**, NOT SSE. `pim-mcp` 0.2.4 was running `transport="sse"` (only `/sse` exposed). Confirmed via curl: `GET /mcp → 404`, only `/sse → 200`.
    - Fix: edited `server.py` to `mcp.run(transport="streamable-http", path="/mcp")`. Explicit `path="/mcp"` (no trailing slash) avoids Starlette Mount's slash-redirect that downgraded to `http://` behind ACA's HTTPS ingress (initial 0.3.0 attempt 307'd to plain HTTP and broke OAuth-style redirect chains; fixed in 0.3.1).
    - Bumped image to `0.3.1`, rebuilt via `az acr build`, rolled ACA via `az containerapp update`.
    - Smoke test (`fastmcp.client.transports.StreamableHttpTransport`) returned 200 + `mcp-session-id` header → wiring path validated.
@@ -202,7 +202,7 @@ Result:
 
 ## Step 5 — Ask agent: *"What do you understand about your PIM role, and are there any pending requests?"*
 
-**Action (Foundry agent chat) — use these three prompts in order:**
+**Action (Azure SRE Agent chat) — use these three prompts in order:**
 
 The SRE agent has read the testbed repo and produced an accurate self-summary already (see `from-sre-agent-1.md`). These prompts validate (a) it grounds itself in the right context, (b) it correctly distinguishes Enterprise MCP vs `pim-mcp`, and (c) it actually invokes the tool.
 
@@ -237,7 +237,7 @@ Now check for any pending PIM activation requests right now and tell me what you
 
 ## Step 6 — Ask agent: *"Should this PIM request be approved?"*
 
-**Action (Foundry agent chat, in same session):**
+**Action (Azure SRE Agent chat, in same session):**
 
 Prompt verbatim:
 ```text
@@ -410,13 +410,13 @@ Closing prose (paraphrased from agent): *"The full audit chain is now traceable:
 - 15:10 UTC — `pim-mcp` 0.5.0 (`get_request_status` + `list_active_role_assignments`) deployed and validated (Step 7b)
 - 15:55 UTC — `pim-mcp` 0.6.1 (`get_request_approver` + IMDS-cache fix) deployed and validated (Step 7c)
 
-The Foundry SRE agent now has **complete read-side coverage** of the PIM request lifecycle: pending → triage → approval (with reasoning) → activation → expiry. Seven tools total: `health`, `list_pending_pim_requests`, `get_user`, `get_role_definition`, `get_request_status`, `list_active_role_assignments`, `get_request_approver`.
+The Azure SRE Agent now has **complete read-side coverage** of the PIM request lifecycle: pending → triage → approval (with reasoning) → activation → expiry. Seven tools total: `health`, `list_pending_pim_requests`, `get_user`, `get_role_definition`, `get_request_status`, `list_active_role_assignments`, `get_request_approver`.
 
 ---
 
 ## Step 8 — Ask agent again: *"Are there any pending PIM requests?"*
 
-**Action (Foundry agent chat, same prompt as Step 5):**
+**Action (Azure SRE Agent chat, same prompt as Step 5):**
 
 ```text
 Are there any pending PIM activation requests right now?
@@ -459,27 +459,27 @@ Are there any pending PIM activation requests right now?
   - `10001` — post-decision audit record (final status `Denied`, approver `pim-approver@MngEnvMCAP094150.onmicrosoft.com` / OID `00a13120-c099-45bc-851a-861ade749067`, reviewed-at `2026-05-08T17:43:43Z`, approver justification quoted verbatim)
 - Remote link present: **Y** — SCRUM-16 → Azure portal PIM blade for the Privileged Role Administrator role definition
 - Tools exercised on jira-mcp: `jira_create_issue`, `jira_add_comment` (×2), `jira_create_remote_issue_link`
-- Notes: Agent went beyond the rule table on its own — flagged the repeat-offender pattern (same requester had identical PRA request denied earlier the same day, request `4dce3295`) and proposed a least-privilege alternative (`Application Administrator` scoped to `grocery-api-sp`). Minor consistency nit: R001 was marked `FAIL (hard)` based on the placeholder ticket reference in the justification rather than `Unverified` after a `jira_search` lookup — outcome was correct, path was assertion-not-verification. Logged as a follow-up to `agent/knowledge.md`. Full Foundry transcripts archived under `SRE-AGENT-CHATS/{3,4}.md`.
+- Notes: Agent went beyond the rule table on its own — flagged the repeat-offender pattern (same requester had identical PRA request denied earlier the same day, request `4dce3295`) and proposed a least-privilege alternative (`Application Administrator` scoped to `grocery-api-sp`). Minor consistency nit: R001 was marked `FAIL (hard)` based on the placeholder ticket reference in the justification rather than `Unverified` after a `jira_search` lookup — outcome was correct, path was assertion-not-verification. Logged as a follow-up to `agent/knowledge.md`. Full Azure SRE Agent transcripts archived under `SRE-AGENT-CHATS/{3,4}.md`.
 
 ---
 
-## Step 10 — Inspect Foundry trace + ACA logs end-to-end
+## Step 10 — Inspect Azure portal trace + ACA logs end-to-end
 
 **Status (2026-05-08):** ⏸ **Deferred / optional** — not required by Zafin.
 
 Zafin's stated audit requirement (per [`ZAFIN_GAP_ANALYSIS_MARCH_2026.md`](../partner-context/ZAFIN_GAP_ANALYSIS_MARCH_2026.md) row 121: *"Immutable audit trail (Jira comment + agent reasoning) — banking compliance requirement"*) is satisfied by the **Jira write-back path proven in Step 9** (SCRUM-16, two automated comments + remote link). Step 10 was an internal validation gate to confirm the reasoning chain is end-to-end inspectable — useful but not contractual.
 
 **Why deferred:**
-- Zafin's compliance story rides on the Jira audit trail, not on Foundry traces.
-- The Foundry portal trace view is always available retroactively for any agent session.
+- Zafin's compliance story rides on the Jira audit trail, not on Azure portal traces.
+- The Azure portal trace view is always available retroactively for any agent session.
 - ACA console logs can be pulled on-demand if anything misbehaves in production.
 - Layer 5 latency loop (below) already gave us the round-trip numbers we needed for the demo.
 
-**Lightweight follow-up (when convenient):** capture one Foundry trace screenshot during the next live agent run for the demo deck — no separate work session needed.
+**Lightweight follow-up (when convenient):** capture one Azure portal trace screenshot during the next live agent run for the demo deck — no separate work session needed.
 
 **Original action plan (kept for reference):**
 
-1. **Foundry trace** (portal): Open the agent session, expand the tool call(s), capture latency + payload.
+1. **Azure portal trace** (portal): Open the agent session, expand the tool call(s), capture latency + payload.
 
 2. **ACA logs** (CLI):
 
@@ -507,7 +507,7 @@ az containerapp logs show \
 
 | Check | Method | Pass criteria | Result |
 |---|---|---|---|
-| Idle polling cost | Leave agent idle 1h, check ACA cost + Foundry token spend | < $1 incremental | |
+| Idle polling cost | Leave agent idle 1h, check ACA cost + agent token spend | < $1 incremental | |
 | `pim-mcp` down → recovery | `az containerapp update --min-replicas 0`; ask agent; restore | Agent surfaces clear error, no crash | |
 | Two requests pending | Trigger 2 activations, ask agent | Both returned, both reasoned about | |
 | Cold start latency | Wait for ACA scale-to-zero, then call | < 10s for first call | |
@@ -562,7 +562,7 @@ Threshold: p95 < 5000 ms = ✅; > 5000 ms = evidence for transport reconsiderati
 |---|---|---|
 | End-to-end latency | | |
 | Reliability under retry/cold-start | | |
-| Foundry integration friction | | |
+| Azure SRE Agent integration friction | | |
 | Compliance story strength | | |
 | Cost @ projected volume | | |
 | Agent reasoning quality | | |

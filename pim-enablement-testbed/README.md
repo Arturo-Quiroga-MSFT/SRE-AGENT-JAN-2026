@@ -1,7 +1,7 @@
 # PIM Enablement Testbed
 
 > Azure SRE Agent — PIM Enablement use case for Zafin
-> Status: **E2E partially validated (May 7, 2026)** · Layer 1 (gap-filler) and Layer 2 (Graph plumbing) green; Layer 3 (Foundry agent wiring) in progress
+> Status: **E2E partially validated (May 7, 2026)** · Layer 1 (gap-filler) and Layer 2 (Graph plumbing) green; Layer 3 (Azure SRE Agent wiring) in progress
 > Architecture: **Hybrid — Enterprise MCP + thin custom MCP for one endpoint**
 > Target: mid-June 2026 internal demo · end-of-June customer-facing demo
 
@@ -58,12 +58,12 @@ and the standalone deck
 | **Layer 1 — gap-filler infra** | `pim-mcp` **0.6.1** deployed to Container Apps (Streamable-HTTP at `/mcp`); MI bound to Graph with `RoleAssignmentSchedule.Read.Directory` + `User.Read.All` + `RoleManagement.Read.Directory` + `PrivilegedAccess.Read.AzureAD`; 7 tools (`list_pending_pim_requests`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `get_user`, `get_role_definition`, `health`); IMDS `bypass_cache=true` token path so newly-granted appRoles take effect immediately; smoke test green | ✅ |
 | **Layer 2 — Graph plumbing** | Test users created (`pim-requester`, `pim-approver`); eligibility assigned (`Provisioned`); approval policy patched (`isApprovalRequired=true`); requester self-activation lands `PendingApproval` | ✅ |
 | **Layer 1 ↔ 2 chain** | `list_pending_pim_requests` returns the live PendingApproval request with matching GUID, justification, ticket info | ✅ |
-| **Layer 3 — Foundry agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, **7 tools** selected); confirmed alongside grafana-mcp + jira-mcp | ✅ |
+| **Layer 3 — Azure SRE Agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, **7 tools** selected); confirmed alongside grafana-mcp + jira-mcp | ✅ |
 | **Layer 4 — agent reasoning** | Prompts 5a (find pending) + 5b (resolve IDs) + 6 (policy/risk reasoning) + 8 (approver-pastable triage) all pass; agent grounds answers in repo (validation-rules.yaml, configure-pim-approval.ps1) | ✅ |
 | **Layer 5 — latency loop** | 10-trial round-trip over `list_pending_pim_requests` (2026-05-08): cold-start trial = **10,484 ms**, warm **p50 = 4,247 ms**, warm **p95 = 6,251 ms**, all-trial **p95 = 10,484 ms**. Warm path acceptable for demo; cold-start above 5 s threshold — mitigation is `min-replicas=1` (currently 0). | ✅* |
 | **Step 7 — full approver flow** | Approver-side approve in PIM portal → status flip → agent re-check returns empty (Step 7); disposition tools `get_request_status` + `list_active_role_assignments` (Step 7b); approver-identity audit trail via `get_request_approver` (Step 7c). All PASS 2026-05-08. | ✅ |
 | **Step 9 — Jira write-back** | Agent creates SCRUM ticket from pending PIM request, posts triage comment (R001–R007 + verdict), adds remote link to PIM portal, then appends final audit comment with approver identity + justification + timestamp post-decision. PASS 2026-05-08 — SCRUM-16 holds the full two-comment audit trail. | ✅ |
-| **Step 10 — Foundry trace + ACA log inspection** | Internal validation of end-to-end reasoning chain visibility (prompt → tool select → MI token → Graph → response). **Not a Zafin requirement** — banking audit need is satisfied by the immutable Jira trail (Step 9). Capture one trace screenshot opportunistically during the next live agent run for the demo deck. | ⏸ Deferred (optional) |
+| **Step 10 — Azure portal trace + ACA log inspection** | Internal validation of end-to-end reasoning chain visibility (prompt → tool select → MI token → Graph → response). **Not a Zafin requirement** — banking audit need is satisfied by the immutable Jira trail (Step 9). Capture one trace screenshot opportunistically during the next live agent run for the demo deck. | ⏸ Deferred (optional) |
 
 > Note: Test-plan Steps 6 and 8 (agent triage prompt + post-approval re-check) are validated under **Layer 4 — agent reasoning** above. Step 10 is reclassified as optional / deferred — Zafin's audit requirement (per [`ZAFIN_GAP_ANALYSIS_MARCH_2026.md`](../partner-context/ZAFIN_GAP_ANALYSIS_MARCH_2026.md) and [`PIM_ENABLEMENT_ARCH_SKETCH.md`](../partner-context/PIM_ENABLEMENT_ARCH_SKETCH.md)) is satisfied by the Jira write-back path proven in Step 9.
 
@@ -292,7 +292,7 @@ pim-enablement-testbed/
 | 3 | Tenant-admin permissions for one-time MCP Server provisioning | `Application.ReadWrite.All`, `DelegatedPermissionGrant.ReadWrite.All` |
 | 4 | Azure CLI ≥ 2.65 + Bicep ≥ 0.30 | `az upgrade` |
 | 5 | PowerShell 7 + `Microsoft.Entra.Beta` ≥ 1.0.13 | For `Grant-EntraBetaMCPServerPermission` |
-| 6 | Foundry workspace + permissions to create an SRE Agent | Existing `aq-main` workspace is fine |
+| 6 | Azure subscription + permissions to create an Azure SRE Agent resource | Existing `aq-main` agent in `rg-aqsre` is fine |
 | 7 | Existing Jira MCP endpoint + Jira project for test tickets | From Jan PoC |
 | 8 | Teams channel + permission to create an Incoming Webhook | Decide channel in next session |
 
@@ -320,7 +320,7 @@ pim-enablement-testbed/
 | **W1** | Build + deploy `pim-mcp` 0.2.4 to ACA; MI bound; smoke test green | ✅ |
 | **W1** | Agent knowledge file + Adaptive Card + placeholder rules | ✅ |
 | **W2** (now) | E2E test plan; create test users; assign eligibility; configure approval; trigger activation; full chain validated | ✅ Steps 2–4 |
-| **W2** | Wire `pim-mcp` into Foundry SRE agent; run prompt validations 5a/5b/6/8 | 🟡 in progress |
+| **W2** | Wire `pim-mcp` into Azure SRE Agent; run prompt validations 5a/5b/6/8 | 🟡 in progress |
 | **W2** | Latency loop (p50/p95); approver flow + post-approval re-check | ⬜ |
 | **W3** | Wire Jira MCP + Teams webhook; first true end-to-end (PIM event → recommendation → card) | ⬜ |
 | **W3** | Failure-path scenarios; demo walkthrough; threat-model note finalize | ⬜ |
@@ -330,7 +330,7 @@ pim-enablement-testbed/
 
 > The Enterprise MCP server pivot collapsed the original PIM-MCP build into
 > ~2 days of provisioning + a single-tool gap-filler. Layers 1 and 2 are
-> validated end-to-end as of May 7. Remaining work is Foundry-side surface
+> validated end-to-end as of May 7. Remaining work is SRE-Agent-side surface
 > wiring + rule iteration.
 
 ---

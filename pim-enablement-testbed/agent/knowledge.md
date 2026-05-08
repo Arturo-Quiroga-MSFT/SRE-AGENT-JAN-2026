@@ -1,6 +1,6 @@
 # PIM Enablement Agent — Knowledge File
 
-> System prompt + behavior rules for the SRE Agent (Foundry).
+> System prompt + behavior rules for the Azure SRE Agent.
 > Loaded into the agent's "Knowledge" section.
 >
 > **MCP servers wired in:**

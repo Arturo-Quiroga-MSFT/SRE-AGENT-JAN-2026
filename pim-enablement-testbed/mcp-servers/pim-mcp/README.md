@@ -102,7 +102,7 @@ az acr build -r <acr-name> -t pim-mcp:0.6.1 mcp-servers/pim-mcp
 Then set `pimMcpImage` parameter when running `azd up` /
 `az deployment sub create`.
 
-## Foundry SRE Agent connector wiring
+## Azure SRE Agent connector wiring
 
 | Field | Value |
 |---|---|
@@ -116,6 +116,6 @@ Note: explicit `path="/mcp"` (no trailing slash) in `server.py` is required to a
 
 Microsoft publishes `MCP.RoleAssignmentSchedule.ReadWrite.Directory`
 (or equivalent write scope) on the Enterprise MCP server. At that point
-the Foundry agent can call `microsoft_graph_get` for pending requests
+the Azure SRE Agent can call `microsoft_graph_get` for pending requests
 too, and `infra/main.bicep` can stop deploying `pim-mcp-aca`. Track:
 <https://github.com/microsoft/EnterpriseMCP/issues>.
