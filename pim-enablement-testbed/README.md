@@ -55,10 +55,12 @@ and the standalone deck
 | **Layer 3 — Foundry agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, **7 tools** selected); confirmed alongside grafana-mcp + jira-mcp | ✅ |
 | **Layer 4 — agent reasoning** | Prompts 5a (find pending) + 5b (resolve IDs) + 6 (policy/risk reasoning) + 8 (approver-pastable triage) all pass; agent grounds answers in repo (validation-rules.yaml, configure-pim-approval.ps1) | ✅ |
 | **Layer 5 — latency loop** | 10-trial p50/p95 over `list_pending_pim_requests` for the test-results doc | ⬜ |
-| **Step 7 — full approver flow** | Approver-side approve in PIM portal → status flip → agent re-check returns empty | ⬜ |
+| **Step 7 — full approver flow** | Approver-side approve in PIM portal → status flip → agent re-check returns empty (Step 7); disposition tools `get_request_status` + `list_active_role_assignments` (Step 7b); approver-identity audit trail via `get_request_approver` (Step 7c). All PASS 2026-05-08. | ✅ |
 | **Step 9 — Jira write-back** | Agent posts triage summary as Jira comment | ⬜ |
 
-**Demo readiness:** functional E2E proven for read/reason path (May 8). Remaining work is metrics + closing the loop with approver action and Jira write-back.
+> Note: Test-plan Steps 6 and 8 (agent triage prompt + post-approval re-check) are validated under **Layer 4 — agent reasoning** above. Step 10 (Foundry trace + ACA log inspection) overlaps Layer 5 latency capture and is pending.
+
+**Demo readiness:** full read/reason/audit path proven end-to-end (May 8) — agent answers *who requested → who approved → with what justification → when does it expire*. Remaining work is the latency loop and Jira write-back.
 
 ### Day 2 (May 7–8) roadblock removers — for future-you
 
