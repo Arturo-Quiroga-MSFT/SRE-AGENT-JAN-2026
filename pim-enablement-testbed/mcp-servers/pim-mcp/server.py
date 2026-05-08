@@ -51,9 +51,13 @@ mcp = FastMCP(
     name="pim-mcp",
     instructions=(
         "Read-only PIM + supporting Graph reader (Managed Identity auth). "
-        "Use list_pending_pim_requests as the trigger endpoint; use get_user "
-        "to resolve a principalId to a displayName/UPN; use get_role_definition "
-        "to resolve a roleDefinitionId to a role displayName. "
+        "Workflow: (1) call list_pending_pim_requests to find requests awaiting "
+        "approval; (2) call get_user / get_role_definition to resolve principalId "
+        "and roleDefinitionId into human-readable identities; (3) call "
+        "get_request_status(request_id) to check the final disposition of a "
+        "specific request that is no longer pending (approved/denied/cancelled/"
+        "expired); (4) call list_active_role_assignments(principal_id) to verify "
+        "a user's currently-active role assignments post-approval. "
         "These tools exist because the SRE Agent connector wizard does not yet "
         "support delegated-OAuth MCP servers like Microsoft's Enterprise MCP, "
         "so we proxy a minimal Graph read surface here via app-only auth. "
