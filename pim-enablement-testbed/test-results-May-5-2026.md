@@ -283,11 +283,31 @@ need Jira MCP or Enterprise MCP that aren't wired yet.
 pwsh -c "Connect-MgGraph -TenantId a172a259-b1c7-4944-b2e1-6d551f954711 -Scopes RoleAssignmentSchedule.Read.Directory; Get-MgRoleManagementDirectoryRoleAssignmentScheduleInstance -Filter \"principalId eq '<requester-oid>'\" | Format-List"
 ```
 
-**Result:**
-- [ ] Pass / [ ] Fail
-- Time approver took: __________
-- Time from approval → status flip: __________
-- Notes: __________
+**Result:** ✅ PASS (2026-05-08, ~14:50 UTC)
+
+- [x] Pass / [ ] Fail
+- Approver: `pim-approver@MngEnvMCAP094150.onmicrosoft.com` (Entra portal → PIM → Approve requests → Microsoft Entra roles).
+- Approver justification: *"Approved per SRE Agent triage 2026-05-08 — request meets R001-R008 with Review verdict; approver sanity-checked ticket and scope."*
+- Portal experience: 1 row visible in "Requests for role activations" table (Privileged Role Administrator / PIM Test Requester / Directory scope / 4h). Approve panel rendered all expected fields including the agent-relevant ones (Reason, Ticket number `TESTBED-001`, Ticket system `manual`, Start/End time).
+- Time from Confirm click → `pendingCount: 0` from agent re-check: under 1 min (next prompt cycle).
+
+### Agent re-check — Prompt 8 (verbatim agent answer)
+
+> *"No pending PIM activation requests right now. The queue is empty — the earlier request from PIM Test Requester for Privileged Role Administrator is no longer in `PendingApproval` state (it was either approved, denied, or expired)."*
+
+### Agent narrative-continuity prompt — *"What changed since I last asked 10 minutes ago?"*
+
+> *"10 minutes ago (~14:42 UTC): 1 pending request was in the queue — PIM Test Requester … requesting Privileged Role Administrator at directory-root scope, submitted at 13:34 UTC with a 4-hour duration. Status was PendingApproval. Now (14:52 UTC): The queue is empty — 0 pending requests. … The most likely explanations, in order of probability: 1. Approved — the designated approver … flipping it to `Provisioned`. The requester now has an active 4-hour Privileged Role Administrator assignment expiring around 17:34 UTC. 2. Denied … 3. Cancelled …"*
+
+**Quality observations:**
+- ✅ Correct empty-result behavior — no stale-state hallucination.
+- ✅ Recalled prior turn details (UPN, role, scope, submit time, duration) accurately.
+- ✅ Computed post-approval expiry time correctly (13:34 UTC + 4h = 17:34 UTC).
+- ✅ Honestly surfaced its tool gap — *"I don't currently have a tool to query the request's final disposition (the `list_pending_pim_requests` tool only returns `PendingApproval` items)"* — and proposed two valid follow-up options (Entra portal History, query `roleAssignmentScheduleInstances` via Graph). Exemplary uncertainty calibration.
+
+**Follow-up parking lot:**
+- Optional 5th tool: `get_request_status(request_id)` to close the disposition gap the agent itself flagged.
+- Optional 6th tool: `list_active_role_assignments(principal_id)` for post-approval verification — would let the agent confirm "approved" deterministically.
 
 ---
 
