@@ -1,8 +1,10 @@
-# PIM MCP Server — gap-filler (ACTIVE)
+# PIM MCP Server — read-only Graph proxy (ACTIVE)
 
-> **Status: ACTIVE as of May 4, 2026** (revived after live testing).
-> Single tool: `list_pending_pim_requests`.
+> **Status: ACTIVE as of May 8, 2026.** Image **0.4.1**. Streamable-HTTP at `/mcp`.
+> Four tools: `list_pending_pim_requests`, `get_user`, `get_role_definition`, `health`.
 > Uses **app-only** Graph auth via Managed Identity.
+>
+> **Scope expanded May 8, 2026** beyond the original 1-tool gap-filler. The SRE Agent's MCP connector wizard does not yet support delegated-OAuth, which blocks wiring Microsoft's Enterprise MCP server. We extended this server with a minimal user/role-resolver surface as a tactical workaround. Track the strategic fix (OAuth in the wizard) and contract this server back to its original 1-tool gap-filler scope when Enterprise MCP becomes wireable.
 
 ## Why this exists
 
@@ -48,21 +50,21 @@ This server uses a Managed Identity (app-only) to read pending requests.
 
 | Tool | Purpose |
 |---|---|
-| `list_pending_pim_requests(top=25)` | List PIM requests with `status eq 'PendingApproval'`, expanded with principal + role definition |
-| `health()` | Liveness probe |
-
-Everything else (resolve user, list group members, check assignments,
-read eligibilities, count licenses…) is done via the Microsoft
-**Enterprise MCP server**'s `microsoft_graph_get` tool — not here.
+| `list_pending_pim_requests(top=25)` | List PIM requests with `status eq 'PendingApproval'`. Returns ID, principal/role/scope, justification, ticket info, schedule. |
+| `get_user(principal_id)` | Resolve an Entra ID object ID to displayName, UPN, mail, jobTitle, department, accountEnabled. |
+| `get_role_definition(role_definition_id)` | Resolve a directory role definition GUID to displayName, description, isBuiltIn, resourceScopes. |
+| `health()` | Liveness probe. |
 
 ## Required Graph application permissions
 
-Grant to the agent's User-Assigned Managed Identity (object/principal ID):
+Grant to the agent's User-Assigned Managed Identity:
 
-| Scope | Why |
+| Scope | Used by |
 |---|---|
-| `RoleAssignmentSchedule.ReadWrite.Directory` | **Actually required by Graph runtime** for LIST `roleAssignmentScheduleRequests` (see UPSTREAM_BUGS.md BUG-001). Latent only — server registers no write tools. |
-| `RoleAssignmentSchedule.Read.Directory` | Documented least-privilege scope. Granted so the assignment becomes a no-op when Microsoft fixes the runtime. |
+| `RoleAssignmentSchedule.ReadWrite.Directory` | `list_pending_pim_requests` — actually required by Graph runtime even for read (UPSTREAM_BUGS BUG-001). Latent only — server registers no write tools. |
+| `RoleAssignmentSchedule.Read.Directory` | `list_pending_pim_requests` — documented least-privilege scope. |
+| `User.Read.All` | `get_user` — added 2026-05-08. |
+| `RoleManagement.Read.Directory` | `get_role_definition` — added 2026-05-08. |
 
 Use the helper script (idempotent, grants both roles):
 
@@ -90,11 +92,21 @@ AZURE_CLIENT_ID=<mi-client-id> uv run python server.py
 
 ```bash
 # from repo root
-az acr build -r <acr-name> -t pim-mcp:0.2.0 mcp-servers/pim-mcp
+az acr build -r <acr-name> -t pim-mcp:0.4.1 mcp-servers/pim-mcp
 ```
 
 Then set `pimMcpImage` parameter when running `azd up` /
 `az deployment sub create`.
+
+## Foundry SRE Agent connector wiring
+
+| Field | Value |
+|---|---|
+| Connection type | **Streamable-HTTP** (NOT SSE — the wizard's path probes 404 against `/sse`) |
+| URL | `https://<aca-fqdn>/mcp` |
+| Authentication | Bearer token, value `not-required` (server does not validate; placeholder satisfies wizard) |
+
+Note: explicit `path="/mcp"` (no trailing slash) in `server.py` is required to avoid Starlette Mount's slash-redirect that downgrades to plain HTTP behind ACA's HTTPS ingress.
 
 ## Retire this server when…
 

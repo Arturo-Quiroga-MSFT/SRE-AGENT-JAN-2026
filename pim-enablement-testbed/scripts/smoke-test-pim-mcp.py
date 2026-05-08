@@ -1,7 +1,8 @@
 """Smoke-test the live pim-mcp Container App end-to-end.
 
-Connects to the SSE endpoint, lists tools, calls list_pending_pim_requests,
-and prints the response. Fully validates: ingress -> MCP -> MI -> Graph.
+Connects to the streamable-http endpoint, lists tools, calls
+list_pending_pim_requests, and prints the response. Fully validates:
+ingress -> MCP -> MI -> Graph.
 
 Usage:
     python scripts/smoke-test-pim-mcp.py <pim-mcp-endpoint>
@@ -10,13 +11,14 @@ import asyncio
 import sys
 
 from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
 
 
 async def main(endpoint: str) -> None:
-    sse_url = endpoint.rstrip("/") + "/sse"
-    print(f"==> Connecting to {sse_url}")
+    mcp_url = endpoint.rstrip("/") + "/mcp"
+    print(f"==> Connecting to {mcp_url} (streamable-http)")
 
-    async with Client(sse_url) as client:
+    async with Client(StreamableHttpTransport(mcp_url)) as client:
         print("==> Listing tools")
         tools = await client.list_tools()
         for tool in tools:

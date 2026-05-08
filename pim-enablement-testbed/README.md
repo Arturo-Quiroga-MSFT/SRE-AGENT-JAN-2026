@@ -38,25 +38,34 @@ Architecture and design rationale: see
 and the standalone deck
 [`partner-context/ZAFIN_PIM_ENABLEMENT_DECK_MAY2026.pptx`](../partner-context/ZAFIN_PIM_ENABLEMENT_DECK_MAY2026.pptx).
 
-**Live test artifacts (May 5–7):**
+**Live test artifacts (May 5–8):**
 [`test-plan-May-5-2026.md`](./test-plan-May-5-2026.md) ·
 [`test-results-May-5-2026.md`](./test-results-May-5-2026.md) ·
 [`from-sre-agent-1.md`](./from-sre-agent-1.md) (sample SRE-agent self-summary).
 
 ---
 
-## Current state — May 7, 2026
+## Current state — May 8, 2026
 
 | Layer | What it covers | Status |
 |---|---|---|
-| **Layer 1 — gap-filler infra** | `pim-mcp` 0.2.4 deployed to Container Apps; MI bound to Graph; SSE `/sse` healthy; smoke test green | ✅ |
+| **Layer 1 — gap-filler infra** | `pim-mcp` **0.4.1** deployed to Container Apps (Streamable-HTTP at `/mcp`); MI bound to Graph with `RoleAssignmentSchedule.Read.Directory` + `User.Read.All` + `RoleManagement.Read.Directory`; 4 tools (`list_pending_pim_requests`, `health`, `get_user`, `get_role_definition`); smoke test green | ✅ |
 | **Layer 2 — Graph plumbing** | Test users created (`pim-requester`, `pim-approver`); eligibility assigned (`Provisioned`); approval policy patched (`isApprovalRequired=true`); requester self-activation lands `PendingApproval` | ✅ |
 | **Layer 1 ↔ 2 chain** | `list_pending_pim_requests` returns the live PendingApproval request with matching GUID, justification, ticket info | ✅ |
-| **Layer 3 — Foundry agent wiring** | Add `pim-mcp` as MCP tool on the SRE agent; verify tool discovery; run prompts 5a/5b/6/8; capture latency | 🟡 in progress |
-| **Layer 4 — agent reasoning** | Self-knowledge prompt; `list_pending_pim_requests` invocation; rule-grounded approve/deny recommendation; post-approval re-check | ⬜ blocked on Layer 3 |
+| **Layer 3 — Foundry agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, 4 tools selected); confirmed alongside grafana-mcp + jira-mcp | ✅ |
+| **Layer 4 — agent reasoning** | Prompts 5a (find pending) + 5b (resolve IDs) + 6 (policy/risk reasoning) + 8 (approver-pastable triage) all pass; agent grounds answers in repo (validation-rules.yaml, configure-pim-approval.ps1) | ✅ |
 | **Layer 5 — latency loop** | 10-trial p50/p95 over `list_pending_pim_requests` for the test-results doc | ⬜ |
+| **Step 7 — full approver flow** | Approver-side approve in PIM portal → status flip → agent re-check returns empty | ⬜ |
+| **Step 9 — Jira write-back** | Agent posts triage summary as Jira comment | ⬜ |
 
-**Demo readiness:** the gap-filler + Graph plumbing fully proves the architectural decision (hybrid Enterprise MCP + 1-tool custom MCP). What remains is the Foundry surface — a click-through to register the MCP tool and a small set of prompt validations.
+**Demo readiness:** functional E2E proven for read/reason path (May 8). Remaining work is metrics + closing the loop with approver action and Jira write-back.
+
+### Day 2 (May 7–8) roadblock removers — for future-you
+
+1. **SRE Agent MCP wizard requires Streamable-HTTP, not SSE.** FastMCP's `transport="sse"` exposes only `/sse`, which 404s the wizard's path probes. Switch to `transport="streamable-http"` AND pass explicit `path="/mcp"` to avoid Starlette's Mount slash-redirect that downgrades to plain HTTP behind ACA's HTTPS ingress.
+2. **80-tool agent-wide cap.** Every connector contributes to a single per-agent budget. Trim grafana-mcp / jira-mcp tool selections to free slots before adding new connectors.
+3. **Microsoft Enterprise MCP can't be wired today.** The wizard offers only Bearer / Custom headers / Managed identity. Enterprise MCP is delegated-OAuth-only by design. Tactical workaround: extend `pim-mcp` with the Graph reads you'd otherwise call via Enterprise MCP (we added `get_user` + `get_role_definition`). Strategic ask: PM team to add OAuth 2.0 Authorization Code (delegated) to the wizard.
+4. **`isPrivileged` is beta-only.** Stay v1.0-compatible in `$select` strings or Graph returns 400.
 
 ---
 

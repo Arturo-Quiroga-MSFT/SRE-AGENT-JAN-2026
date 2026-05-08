@@ -50,12 +50,14 @@ log = logging.getLogger("pim-mcp")
 mcp = FastMCP(
     name="pim-mcp",
     instructions=(
-        "Read-only access to PIM activation requests in PendingApproval state. "
-        "This server exists ONLY to fill the gap left by Microsoft's Enterprise "
-        "MCP server, which cannot reach the roleAssignmentScheduleRequests "
-        "Graph endpoint in current preview. Use this for the trigger; use the "
-        "Microsoft Enterprise MCP server (microsoft_graph_get) for everything "
-        "else. NEVER attempt to approve or deny — no write tool exists."
+        "Read-only PIM + supporting Graph reader (Managed Identity auth). "
+        "Use list_pending_pim_requests as the trigger endpoint; use get_user "
+        "to resolve a principalId to a displayName/UPN; use get_role_definition "
+        "to resolve a roleDefinitionId to a role displayName. "
+        "These tools exist because the SRE Agent connector wizard does not yet "
+        "support delegated-OAuth MCP servers like Microsoft's Enterprise MCP, "
+        "so we proxy a minimal Graph read surface here via app-only auth. "
+        "NEVER attempt to approve, deny, or write — no write tool exists."
     ),
 )
 
@@ -63,5 +65,12 @@ register_tools(mcp)
 
 
 if __name__ == "__main__":
-    log.info("PIM MCP server starting on 0.0.0.0:8000 (SSE)")
-    mcp.run(transport="sse", host="0.0.0.0", port=8000)
+    log.info("PIM MCP server starting on 0.0.0.0:8000 (streamable-http at /mcp)")
+    # path="/mcp" (no trailing slash) avoids Starlette's Mount slash-redirect that
+    # downgrades to http:// behind ACA's HTTPS ingress and breaks Foundry connector.
+    mcp.run(
+        transport="streamable-http",
+        host="0.0.0.0",
+        port=8000,
+        path="/mcp",
+    )

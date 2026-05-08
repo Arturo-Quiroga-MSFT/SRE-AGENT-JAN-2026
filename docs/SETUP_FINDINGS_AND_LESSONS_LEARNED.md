@@ -489,3 +489,50 @@ PORT=9000
 - [Grafana MCP Server](https://github.com/grafana/mcp-grafana)
 - [sooperset/mcp-atlassian](https://github.com/sooperset/mcp-atlassian)
 - [FastMCP HTTP Transport](https://personal-1d37018d.mintlify.app/docs/http-transport)
+
+---
+
+## Addendum — May 8, 2026: pim-mcp wiring + Enterprise MCP gap
+
+Wiring the custom `pim-mcp` (PIM Enablement testbed) into the SRE Agent surfaced four findings worth adding to the institutional knowledge:
+
+### 1. The SSE vs Streamable-HTTP rule applies to FastMCP servers too
+
+`pim-mcp` was originally built with FastMCP's `transport="sse"`, which exposes only `/sse`. The SRE Agent connector wizard probes `/mcp` and 404s. Same root cause as the grafana-mcp finding above (Phase 3) — but worth re-stating because **FastMCP does not auto-serve a Streamable-HTTP fallback**. You must explicitly write:
+
+```python
+mcp.run(transport="streamable-http", host="0.0.0.0", port=8000, path="/mcp")
+```
+
+The explicit `path="/mcp"` (no trailing slash) avoids a Starlette Mount slash-redirect that downgrades to plain HTTP behind ACA's HTTPS ingress. Without it, the wizard's smoke probe gets 307 → `http://...` → broken redirect chain.
+
+### 2. The 80-tool agent cap is connector-agnostic
+
+The wizard rejected adding `pim-mcp`'s 2 tools with `80/80 tools selected, 2 available` and disabled checkboxes. The cap is **per-agent across all connectors**. Trim one connector's tool selection (we trimmed grafana-mcp) to free slots before adding new ones.
+
+### 3. Microsoft Enterprise MCP cannot be wired through the wizard today
+
+The SRE Agent MCP wizard auth dropdown offers only:
+- Bearer token (static — no refresh)
+- Custom headers (same problem)
+- Managed identity
+
+Microsoft's first-party Enterprise MCP server (`https://mcp.svc.cloud.microsoft/enterprise`) is **delegated-OAuth-only by design**. None of the three options can authenticate against it. Net effect: the SRE Agent currently cannot consume Microsoft's own MCP server, even though Foundry Agent Builder can.
+
+**Strategic ask** (raised with Deepthi, SRE Agent PM): add OAuth 2.0 Authorization Code (delegated) as a 4th wizard auth option, with smaller fallbacks (custom-header refresh hook, MI federated token exchange to delegated user token).
+
+**Tactical workaround** in this PoC: extended `pim-mcp` itself with `get_user` and `get_role_definition` tools so the agent can resolve Graph IDs without Enterprise MCP. Granted `User.Read.All` and `RoleManagement.Read.Directory` to the pim-mcp Managed Identity. Bumped image to 0.4.1.
+
+### 4. `unifiedRoleDefinition.isPrivileged` is beta-only
+
+A `$select=isPrivileged` against `/v1.0/roleManagement/directory/roleDefinitions/{id}` returns Graph 400. The property exists on the `beta` endpoint only. Stay v1.0-compatible in `$select` strings or split the query.
+
+### Net result
+
+End-to-end PIM scenario validated through the SRE Agent on May 8, 2026:
+- Agent identifies pending PIM activation request via custom MCP tool.
+- Resolves principal/role IDs via the same custom MCP tool's added Graph reads.
+- Reasons about the policy gate citing in-repo validation rules (R001-R008).
+- Produces approver-pastable triage paragraph with computed expiration math.
+
+See `pim-enablement-testbed/test-results-May-5-2026.md` for the full run log.
