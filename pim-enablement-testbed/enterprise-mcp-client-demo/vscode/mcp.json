@@ -1,0 +1,15 @@
+{
+  "$schema": "https://aka.ms/vscode-mcp-schema",
+  "servers": {
+    "enterprise-mcp": {
+      "type": "http",
+      "url": "https://mcp.svc.cloud.microsoft/enterprise",
+      "description": "Microsoft-hosted MCP server for Microsoft Graph (PIM, identity, audit). Delegated OAuth handled by VS Code."
+    },
+    "pim-mcp": {
+      "type": "http",
+      "url": "https://ca-pimtest-pimmcp.gentleocean-dea895de.eastus2.azurecontainerapps.io/mcp",
+      "description": "Gap-filler MCP for PIM PendingApproval reads (the one endpoint Enterprise MCP can't reach). Anonymous by design — read-only, MI-fronted Graph calls."
+    }
+  }
+}

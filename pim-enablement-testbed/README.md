@@ -43,6 +43,9 @@ and the standalone deck
 [`test-results-May-5-2026.md`](./test-results-May-5-2026.md) ·
 [`from-sre-agent-1.md`](./from-sre-agent-1.md) (sample SRE-agent self-summary).
 
+**Partner-enablement quickstart (NEW, May 8):**
+[`enterprise-mcp-client-demo/`](./enterprise-mcp-client-demo/) — 10-minute VS Code Copilot Chat walk-through showing the hybrid Enterprise MCP + `pim-mcp` architecture in action, with tiered scope grants (PIM core → identity context → SRE/audit broadening) and 5 demo prompts.
+
 ---
 
 ## Current state — May 8, 2026
