@@ -54,13 +54,14 @@ and the standalone deck
 | **Layer 1 ↔ 2 chain** | `list_pending_pim_requests` returns the live PendingApproval request with matching GUID, justification, ticket info | ✅ |
 | **Layer 3 — Foundry agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, **7 tools** selected); confirmed alongside grafana-mcp + jira-mcp | ✅ |
 | **Layer 4 — agent reasoning** | Prompts 5a (find pending) + 5b (resolve IDs) + 6 (policy/risk reasoning) + 8 (approver-pastable triage) all pass; agent grounds answers in repo (validation-rules.yaml, configure-pim-approval.ps1) | ✅ |
-| **Layer 5 — latency loop** | 10-trial p50/p95 over `list_pending_pim_requests` for the test-results doc | ⬜ |
+| **Layer 5 — latency loop** | 10-trial round-trip over `list_pending_pim_requests` (2026-05-08): cold-start trial = **10,484 ms**, warm **p50 = 4,247 ms**, warm **p95 = 6,251 ms**, all-trial **p95 = 10,484 ms**. Warm path acceptable for demo; cold-start above 5 s threshold — mitigation is `min-replicas=1` (currently 0). | ✅* |
 | **Step 7 — full approver flow** | Approver-side approve in PIM portal → status flip → agent re-check returns empty (Step 7); disposition tools `get_request_status` + `list_active_role_assignments` (Step 7b); approver-identity audit trail via `get_request_approver` (Step 7c). All PASS 2026-05-08. | ✅ |
 | **Step 9 — Jira write-back** | Agent creates SCRUM ticket from pending PIM request, posts triage comment (R001–R007 + verdict), adds remote link to PIM portal, then appends final audit comment with approver identity + justification + timestamp post-decision. PASS 2026-05-08 — SCRUM-16 holds the full two-comment audit trail. | ✅ |
+| **Step 10 — Foundry trace + ACA log inspection** | Internal validation of end-to-end reasoning chain visibility (prompt → tool select → MI token → Graph → response). **Not a Zafin requirement** — banking audit need is satisfied by the immutable Jira trail (Step 9). Capture one trace screenshot opportunistically during the next live agent run for the demo deck. | ⏸ Deferred (optional) |
 
-> Note: Test-plan Steps 6 and 8 (agent triage prompt + post-approval re-check) are validated under **Layer 4 — agent reasoning** above. Step 10 (Foundry trace + ACA log inspection) overlaps Layer 5 latency capture and is pending.
+> Note: Test-plan Steps 6 and 8 (agent triage prompt + post-approval re-check) are validated under **Layer 4 — agent reasoning** above. Step 10 is reclassified as optional / deferred — Zafin's audit requirement (per [`ZAFIN_GAP_ANALYSIS_MARCH_2026.md`](../partner-context/ZAFIN_GAP_ANALYSIS_MARCH_2026.md) and [`PIM_ENABLEMENT_ARCH_SKETCH.md`](../partner-context/PIM_ENABLEMENT_ARCH_SKETCH.md)) is satisfied by the Jira write-back path proven in Step 9.
 
-**Demo readiness:** full read/reason/audit/write path proven end-to-end (May 8) — agent answers *who requested → who approved → with what justification → when does it expire*, **and** writes a parallel audit trail into Jira (SCRUM-16). Remaining work is Layer 5 latency capture and Step 10 trace inspection.
+**Demo readiness:** full read/reason/audit/write path proven end-to-end (May 8) with latency profile captured — agent answers *who requested → who approved → with what justification → when does it expire*, **and** writes a parallel audit trail into Jira (SCRUM-16). Remaining hardening: set `min-replicas=1` on `ca-pimtest-pimmcp` ahead of the live demo to eliminate the cold-start tail.
 
 ### Day 2 (May 7–8) roadblock removers — for future-you
 
