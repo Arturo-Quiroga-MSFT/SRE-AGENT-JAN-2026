@@ -82,6 +82,8 @@ Write-Host "    DisplayName: $($mi.DisplayName)"
 
 $existingAssignments = Get-EntraBetaServicePrincipalAppRoleAssignment -ServicePrincipalId $AgentMiPrincipalId
 
+$grantFailures = @()
+
 foreach ($roleValue in $RequiredAppRoles) {
     Write-Host "==> Processing app role: $roleValue"
     $appRole = $graphSp.AppRoles | Where-Object { $_.Value -eq $roleValue -and $_.AllowedMemberTypes -contains 'Application' }
@@ -97,22 +99,62 @@ foreach ($roleValue in $RequiredAppRoles) {
     }
 
     Write-Host "    Granting..."
-    New-EntraBetaServicePrincipalAppRoleAssignment `
-        -ServicePrincipalId $AgentMiPrincipalId `
-        -PrincipalId        $AgentMiPrincipalId `
-        -ResourceId         $graphSp.Id `
-        -AppRoleId          $appRole.Id | Out-Null
-    Write-Host "    Done."
+    try {
+        # ErrorAction=Stop converts the underlying non-terminating Graph 403
+        # into a catchable terminating error, so we don't print "Done." after
+        # a silent failure (caused by the caller lacking PRA / Global Admin).
+        New-EntraBetaServicePrincipalAppRoleAssignment `
+            -ServicePrincipalId $AgentMiPrincipalId `
+            -PrincipalId        $AgentMiPrincipalId `
+            -ResourceId         $graphSp.Id `
+            -AppRoleId          $appRole.Id `
+            -ErrorAction        Stop | Out-Null
+        Write-Host "    Done."
+    }
+    catch {
+        $msg = $_.Exception.Message
+        Write-Warning "    GRANT FAILED for '$roleValue': $msg"
+        if ($msg -match 'Authorization_RequestDenied|Insufficient privileges|403') {
+            Write-Warning "    Hint: granting Microsoft Graph application app roles requires the caller to hold"
+            Write-Warning "          Privileged Role Administrator (or Global Administrator) at directory scope."
+            Write-Warning "          Activate PRA via PIM in this tenant, then re-run this script."
+        }
+        $grantFailures += $roleValue
+    }
 }
 
 Write-Host ""
 Write-Host "==> Verification"
-Get-EntraBetaServicePrincipalAppRoleAssignment -ServicePrincipalId $AgentMiPrincipalId |
-    Where-Object { $_.ResourceId -eq $graphSp.Id } |
-    ForEach-Object {
-        $role = $graphSp.AppRoles | Where-Object Id -eq $_.AppRoleId
+$assignments = Get-EntraBetaServicePrincipalAppRoleAssignment -ServicePrincipalId $AgentMiPrincipalId |
+    Where-Object { $_.ResourceId -eq $graphSp.Id }
+$assignedRoleValues = @()
+foreach ($a in $assignments) {
+    $role = $graphSp.AppRoles | Where-Object Id -eq $a.AppRoleId
+    if ($role) {
+        $assignedRoleValues += $role.Value
         "    {0} -> {1}" -f $mi.DisplayName, $role.Value
     }
+}
+
+# Fail loudly if any required role is missing, so a partial grant can't be
+# mistaken for success on the next deploy / smoke test.
+$missing = @()
+foreach ($required in $RequiredAppRoles) {
+    $publishedAsApp = $graphSp.AppRoles | Where-Object { $_.Value -eq $required -and $_.AllowedMemberTypes -contains 'Application' }
+    if (-not $publishedAsApp) { continue }   # already warned above
+    if ($assignedRoleValues -notcontains $required) {
+        $missing += $required
+    }
+}
+
+if ($missing.Count -gt 0 -or $grantFailures.Count -gt 0) {
+    Write-Host ""
+    Write-Error "Grant INCOMPLETE. Missing required app roles on '$($mi.DisplayName)':`n  - $($missing -join "`n  - ")"
+    if ($grantFailures.Count -gt 0) {
+        Write-Error "Grant cmdlet errored on:`n  - $($grantFailures -join "`n  - ")"
+    }
+    exit 1
+}
 
 Write-Host ""
 Write-Host "Grant complete. The pim-mcp Container App can now call"
