@@ -25,8 +25,8 @@ flowchart LR
         PIM[(PIM endpoints<br/>roleManagement/*)]
     end
 
-    subgraph Foundry["Microsoft Foundry"]
-        Agent["SRE Agent <b>aq-main</b><br/>(80-tool budget)"]
+    subgraph AzPortal["Azure (Azure portal)"]
+        Agent["Azure SRE Agent <b>aq-main</b><br/>(80-tool budget)"]
     end
 
     subgraph MS["Microsoft-managed"]
@@ -62,8 +62,8 @@ flowchart LR
     classDef ms fill:#0078d4,color:#fff,stroke:#005a9e
     classDef ours fill:#2e7d32,color:#fff,stroke:#1b5e20
     classDef gap fill:#c62828,color:#fff,stroke:#8e0000
-    class EntMCP,Foundry,Agent,Graph,PIM ms
-    class PimMCP,MI,ACA ours
+    class EntMCP,Graph,PIM ms
+    class Agent,AzPortal,PimMCP,MI,ACA ours
 ```
 
 **Read it as:** Microsoft-blue boxes are managed for us; green boxes are what we own and operate; the red `pim-mcp` exists *only* because the `roleAssignmentScheduleRequests` endpoint requires `ReadWrite` delegated permission that Enterprise MCP doesn't publish in preview ([UPSTREAM_BUGS.md BUG-001](UPSTREAM_BUGS.md)).
@@ -78,7 +78,7 @@ End-to-end of the showpiece scenario: *"Are there any pending PIM requests right
 sequenceDiagram
     autonumber
     actor Op as Approver
-    participant FA as Foundry Agent (aq-main)
+    participant FA as Azure SRE Agent (aq-main)
     participant EM as Enterprise MCP
     participant PM as pim-mcp (ACA)
     participant GR as Microsoft Graph
@@ -284,12 +284,12 @@ stateDiagram-v2
     L1: Layer 1 — gap-filler infra<br/>pim-mcp 0.6.1 on ACA · 7 tools · MI
     L2: Layer 2 — Graph plumbing<br/>test users · eligibility · approval policy
     L12: Layer 1↔2 chain<br/>PendingApproval reachable
-    L3: Layer 3 — Foundry wiring<br/>pim-mcp + jira-mcp + grafana-mcp
+    L3: Layer 3 — Azure SRE Agent wiring<br/>pim-mcp + jira-mcp + grafana-mcp
     L4: Layer 4 — agent reasoning<br/>R001–R007 · prompts 5a/5b/6/8
     L5: Layer 5 — latency loop<br/>warm p95 6.25s · cold 10.5s
     S7: Step 7 — full approver flow<br/>approve → status flip → audit
     S9: Step 9 — Jira write-back<br/>SCRUM-16 two-comment trail
-    S10: Step 10 — Foundry trace ⏸<br/><i>deferred (optional)</i>
+    S10: Step 10 — Azure portal trace ⏸<br/><i>deferred (optional)</i>
 
     L1 --> L2: ✅
     L2 --> L12: ✅
