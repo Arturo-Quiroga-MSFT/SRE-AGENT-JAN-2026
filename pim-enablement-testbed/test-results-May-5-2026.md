@@ -351,6 +351,69 @@ Closing prose: *"The requester **currently has the role active**. The assignment
 
 ---
 
+### Step 7c — Approver-identity gap closed (pim-mcp 0.6.0 → 0.6.1, ~15:55 UTC) ✅
+
+**Second self-identified gap** (raised by the agent at the close of Step 7b):
+> *"I can tell you the request was approved and is currently active, but no exposed tool surfaces the **identity of the approver** or their **justification**. To meet the audit-trail bar — 'who approved this, when, and why?' — we'd need a tool that hits the `roleAssignmentApprovals/{id}/steps` collection on Microsoft Graph."*
+
+**Tool shipped:** `get_request_approver(request_id)` — chains in one call:
+
+1. `GET /v1.0/.../roleAssignmentScheduleRequests/{id}` → extracts `approvalId`
+2. `GET /beta/.../roleAssignmentApprovals/{approvalId}/steps` → returns full reviewer trail
+
+Returns: `requestId`, `approvalId`, `requestStatus`, and a `steps[]` array with `reviewedBy {id, displayName, userPrincipalName, mail}`, `reviewResult`, `status`, `reviewedDateTime`, `justification`. Multi-stage approval policies surface as multiple step rows.
+
+**Image lineage (same day):**
+- `pim-mcp:0.6.0` (rev `0000010`) — initial ship; tool reachable end-to-end but Graph beta returned 403 on the live call.
+- `pim-mcp:0.6.1` (rev `0000011`) — token-cache fix (see below); approver tool returns 200 + full payload in <300ms.
+
+**Roadblock removed (the real story behind 0.6.0 → 0.6.1):**
+
+| Symptom | "After granting `PrivilegedAccess.Read.AzureAD` to the MI, the new tool kept getting `403 Valid permissions not present` for ~30 minutes — even though admin consent was confirmed." |
+|---|---|
+| First instinct (wrong) | "PIM beta resource-side authorization cache lag — wait it out." |
+| Diagnostic that cracked it | Decoded the live token in-container by hitting `IDENTITY_ENDPOINT` directly. The `roles` claim was missing `PrivilegedAccess.Read.AzureAD`, even though the SP's `appRoleAssignments` confirmed the grant. Same call with `bypass_cache=true` returned a token with all 5 roles **and** the beta endpoint immediately returned 200 OK. |
+| **True root cause** | **Container Apps IMDS sidecar caches MI tokens by `(client_id, resource)` for the full token lifetime.** Newly-granted appRoles do **not** appear in cached tokens until natural expiry (hours away). The `azure-identity` SDK has no way to signal "force a fresh roles claim"; it just gets handed the cached token. |
+| **Fix (0.6.1)** | New `_get_graph_token()` in `tools.py` hits `IDENTITY_ENDPOINT` directly with `bypass_cache=true` when running on ACA, with a ~50-min in-process cache to avoid hammering IMDS. Falls back to `DefaultAzureCredential` for local dev. |
+| **Operational rule** | "When granting a new appRole to a Container Apps MI: `az containerapp revision restart` after the grant. The bypass-cache path picks up fresh claims immediately; no waiting on IMDS expiry." |
+
+This is a generally-useful finding for any ACA + MI + Microsoft Graph workload. Full RCA in commit message [`f4e9032`](https://github.com/Arturo-Quiroga-MSFT/SRE-AGENT-JAN-2026/commit/f4e9032).
+
+**Re-prompt (verbatim, 2026-05-08 ~15:55 UTC):**
+
+> *"Who approved request `d13bbfc1-9ca5-46cf-9b8b-c6521213a9d0`?"*
+
+**Agent behavior:** invoked `get_request_approver` (tool-call card visible, `Completed`), then composed a structured-table answer.
+
+**Agent answer (key fields):**
+
+| Detail | Value |
+|---|---|
+| Approver | PIM Test Approver (`pim-approver@MngEnvMCAP094150.onmicrosoft.com`) |
+| Approver ObjectId | `00a13120-c099-45bc-851a-861ade749067` |
+| Decision | Approve |
+| Reviewed At | 2026-05-08 **14:51:23 UTC** |
+| Approval Stage | SingleStage — Completed |
+| Justification | *"Approved per SRE Agent triage 2026-05-08 — request meets R001-R008 with Review verdict; approver sanity-checked ticket and scope."* |
+
+Closing prose (paraphrased from agent): *"The full audit chain is now traceable: request → agent triage → approver decision with reasoning → provisioned assignment. Notably, the approver referenced the SRE Agent's triage summary in their justification — exactly the workflow this testbed was designed to validate."*
+
+**Quality observations:**
+- ✅ All 6 fields match Graph beta ground truth byte-for-byte (independently verified via `scripts/smoke-test-approver.py`).
+- ✅ Approver UPN, ObjectId, decision, timestamp, and justification surfaced verbatim from the Graph response — no paraphrasing of the justification text.
+- ✅ Agent recognized the **review-verdict feedback loop**: approver's free-text justification cited the agent's R001–R008 rubric, demonstrating the human-in-the-loop pattern the testbed was designed to validate.
+- ✅ No hallucination, no fabricated approver attributes.
+
+**Net result:** Both parking-lot items the agent self-identified during Step 6 + Step 7b were closed **on the same day**:
+- 13:34 UTC — request submitted (Step 4)
+- 14:51 UTC — approver acts (Step 7)
+- 15:10 UTC — `pim-mcp` 0.5.0 (`get_request_status` + `list_active_role_assignments`) deployed and validated (Step 7b)
+- 15:55 UTC — `pim-mcp` 0.6.1 (`get_request_approver` + IMDS-cache fix) deployed and validated (Step 7c)
+
+The Foundry SRE agent now has **complete read-side coverage** of the PIM request lifecycle: pending → triage → approval (with reasoning) → activation → expiry. Seven tools total: `health`, `list_pending_pim_requests`, `get_user`, `get_role_definition`, `get_request_status`, `list_active_role_assignments`, `get_request_approver`.
+
+---
+
 ## Step 8 — Ask agent again: *"Are there any pending PIM requests?"*
 
 **Action (Foundry agent chat, same prompt as Step 5):**
@@ -492,17 +555,18 @@ Threshold: p95 < 5000 ms = ✅; > 5000 ms = evidence for transport reconsiderati
 - [ ] Plan V2 migration to Function + OpenAPI
 - [ ] Other: __________
 
-**Confidence:** **Medium-High** — functional E2E (Steps 1, 5a, 5b, 6, 8) all pass with strong reasoning quality. Remaining work: Step 7 (approver flow), Step 9 (Jira write-back), Step 10 (full trace inspection), p50/p95 latency loop. Strategic gap: SRE Agent connector wizard needs OAuth-delegated auth before Microsoft Enterprise MCP can be wired (architecturally preferable to the current MI-extended `pim-mcp`).
+**Confidence:** **High** — functional E2E (Steps 1, 5a, 5b, 6, 7, 7b, 7c, 8) all pass with strong reasoning quality. Full PIM lifecycle now traceable through the agent: pending → triage → approval (with approver identity + justification) → activation → expiry. Remaining work: Step 9 (Jira write-back), Step 10 (full trace inspection), p50/p95 latency loop. Strategic gap: SRE Agent connector wizard needs OAuth-delegated auth before Microsoft Enterprise MCP can be wired (architecturally preferable to the current MI-extended `pim-mcp`).
 
 ---
 
 ## Day 2 summary (2026-05-08) — what changed
 
 **Successes:**
-- ✅ PIM-MCP connector wired into SRE Agent `aq-main` (Streamable-HTTP, 4 tools).
+- ✅ PIM-MCP connector wired into SRE Agent `aq-main` (Streamable-HTTP, **7 tools** by end of day).
 - ✅ End-to-end re-trigger of PIM activation (request `d13bbfc1-…`, PT4H duration).
-- ✅ Steps 5a, 5b, 6, 8 — all pass with strong reasoning.
-- ✅ Agent meta-aware: noticed it was using the two newly-deployed tools (`get_user`, `get_role_definition`) it hadn't had access to minutes earlier.
+- ✅ Steps 5a, 5b, 6, 7, 7b, 7c, 8 — all pass with strong reasoning.
+- ✅ Agent meta-aware: at end of Step 6 and Step 7b, *the agent itself* identified the next two missing tools (disposition + approver-identity); both shipped same-day in response.
+- ✅ Full audit chain closed: agent can answer *who requested → who approved → what was their justification → when does it expire*.
 
 **Roadblocks removed:**
 - 🔧 SSE → Streamable-HTTP transport migration (image 0.2.4 → 0.3.1).
@@ -510,15 +574,21 @@ Threshold: p95 < 5000 ms = ✅; > 5000 ms = evidence for transport reconsiderati
 - 🔧 80-tool agent cap (trimmed grafana-mcp selection).
 - 🔧 Enterprise MCP delegated-OAuth gap → tactical workaround via pim-mcp expansion (image 0.3.1 → 0.4.1, +2 tools, +2 Graph perms on MI).
 - 🔧 `isPrivileged` v1.0/beta property mismatch (dropped from $select).
+- 🔧 Disposition gap (parking lot from Step 7) → `pim-mcp` 0.5.0 added `get_request_status` + `list_active_role_assignments`.
+- 🔧 Approver-identity gap (parking lot from Step 7b) → `pim-mcp` 0.6.0 added `get_request_approver` (Graph beta `/roleAssignmentApprovals/{id}/steps`, +1 Graph perm `PrivilegedAccess.Read.AzureAD`).
+- 🔧 **Container Apps IMDS token-cache trap** → `pim-mcp` 0.6.1 forces fresh token via `IDENTITY_ENDPOINT?bypass_cache=true`. Newly-granted appRoles do NOT appear in cached MI tokens for hours after consent; this fix is generally useful for any ACA + MI + Microsoft Graph workload (commit [`f4e9032`](https://github.com/Arturo-Quiroga-MSFT/SRE-AGENT-JAN-2026/commit/f4e9032)).
 
 **Strategic asks logged:**
 - Email/Loop draft to Deepthi (SRE Agent PM): add OAuth 2.0 Authorization Code (delegated) as a 4th wizard auth option, with smaller fallbacks (custom-header refresh hook, MI federated token exchange).
 
 **Files touched (Day 2):**
-- `mcp-servers/pim-mcp/server.py` — transport switch + explicit `path`.
-- `mcp-servers/pim-mcp/tools.py` — added `get_user`, `get_role_definition`.
-- `mcp-servers/pim-mcp/pyproject.toml` — version 0.2.0 → 0.4.1.
+- `mcp-servers/pim-mcp/server.py` — transport switch + explicit `path` + instructions for 7-tool workflow.
+- `mcp-servers/pim-mcp/tools.py` — added `get_user`, `get_role_definition`, `get_request_status`, `list_active_role_assignments`, `get_request_approver`; introduced `_get_graph_token()` with IMDS `bypass_cache=true` + in-process token cache.
+- `mcp-servers/pim-mcp/pyproject.toml` — version 0.2.0 → **0.6.1** (5 ships in one day).
+- `mcp-servers/pim-mcp/README.md` + `pim-enablement-testbed/README.md` — tool tables + perm matrix updated.
 - `scripts/smoke-test-pim-mcp.py` — switched client transport from SSE to Streamable-HTTP.
+- `scripts/smoke-test-new-tools.py` — coverage for 0.5.0 tools.
+- `scripts/smoke-test-approver.py` — coverage for 0.6.x approver tool.
 
 **Open follow-ups for the team:**
 - 
