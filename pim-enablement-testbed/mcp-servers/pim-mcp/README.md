@@ -1,10 +1,10 @@
 # PIM MCP Server — read-only Graph proxy (ACTIVE)
 
-> **Status: ACTIVE as of May 8, 2026.** Image **0.5.0**. Streamable-HTTP at `/mcp`.
-> Six tools: `list_pending_pim_requests`, `get_request_status`, `list_active_role_assignments`, `get_user`, `get_role_definition`, `health`.
-> Uses **app-only** Graph auth via Managed Identity.
+> **Status: ACTIVE as of May 8, 2026.** Image **0.6.0**. Streamable-HTTP at `/mcp`.
+> Seven tools: `list_pending_pim_requests`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `get_user`, `get_role_definition`, `health`.
+> Uses **app-only** Graph auth via Managed Identity. One tool (`get_request_approver`) hits the Graph **beta** endpoint; the other six are v1.0.
 >
-> **Scope expanded May 8, 2026** beyond the original 1-tool gap-filler. The SRE Agent's MCP connector wizard does not yet support delegated-OAuth, which blocks wiring Microsoft's Enterprise MCP server. We extended this server with a minimal user/role-resolver surface plus request-disposition + active-assignment lookups as a tactical workaround. Track the strategic fix (OAuth in the wizard) and contract this server back to its original 1-tool gap-filler scope when Enterprise MCP becomes wireable.
+> **Scope expanded May 8, 2026** beyond the original 1-tool gap-filler. The SRE Agent's MCP connector wizard does not yet support delegated-OAuth, which blocks wiring Microsoft's Enterprise MCP server. We extended this server with a minimal user/role-resolver surface plus request-disposition, active-assignment, and approver-audit lookups as a tactical workaround. Track the strategic fix (OAuth in the wizard) and contract this server back to its original 1-tool gap-filler scope when Enterprise MCP becomes wireable.
 
 ## Why this exists
 
@@ -50,8 +50,9 @@ This server uses a Managed Identity (app-only) to read pending requests.
 
 | Tool | Purpose |
 |---|---|
-| `list_pending_pim_requests(top=25)` | List PIM requests with `status eq 'PendingApproval'`. Returns ID, principal/role/scope, justification, ticket info, schedule. Response includes a `hint` directing the agent to `get_request_status` / `list_active_role_assignments` for non-pending follow-ups. |
+| `list_pending_pim_requests(top=25)` | List PIM requests with `status eq 'PendingApproval'`. Returns ID, principal/role/scope, justification, ticket info, schedule. Response includes a `hint` directing the agent to the disposition / approver / active-assignment tools for follow-ups. |
 | `get_request_status(request_id)` | Get the current state of any PIM request by ID — closes the disposition gap (approved / denied / cancelled / expired) for requests no longer in PendingApproval. |
+| `get_request_approver(request_id)` | Audit trail: who approved/denied the request, when, and with what justification. Hits the Graph **beta** approvals endpoint (`/roleManagement/directory/roleAssignmentApprovals/{id}/steps`). Returns the full `steps` array (multi-stage approval policies return multiple rows). |
 | `list_active_role_assignments(principal_id, top=25)` | List currently-active role assignments for a principal from `roleAssignmentScheduleInstances`. Use post-approval to verify a requester actually holds the role. |
 | `get_user(principal_id)` | Resolve an Entra ID object ID to displayName, UPN, mail, jobTitle, department, accountEnabled. |
 | `get_role_definition(role_definition_id)` | Resolve a directory role definition GUID to displayName, description, isBuiltIn, resourceScopes. |
@@ -64,9 +65,10 @@ Grant to the agent's User-Assigned Managed Identity:
 | Scope | Used by |
 |---|---|
 | `RoleAssignmentSchedule.ReadWrite.Directory` | `list_pending_pim_requests` — actually required by Graph runtime even for read (UPSTREAM_BUGS BUG-001). Latent only — server registers no write tools. |
-| `RoleAssignmentSchedule.Read.Directory` | `list_pending_pim_requests`, `get_request_status`, `list_active_role_assignments` — documented least-privilege scope. |
+| `RoleAssignmentSchedule.Read.Directory` | `list_pending_pim_requests`, `get_request_status`, `get_request_approver` (request lookup), `list_active_role_assignments` — documented least-privilege scope. |
 | `User.Read.All` | `get_user` — added 2026-05-08. |
 | `RoleManagement.Read.Directory` | `get_role_definition` — added 2026-05-08. |
+| `PrivilegedAccess.Read.AzureAD` | `get_request_approver` (approval steps lookup, beta endpoint) — added 2026-05-08. |
 
 Use the helper script (idempotent, grants both roles):
 
@@ -94,7 +96,7 @@ AZURE_CLIENT_ID=<mi-client-id> uv run python server.py
 
 ```bash
 # from repo root
-az acr build -r <acr-name> -t pim-mcp:0.5.0 mcp-servers/pim-mcp
+az acr build -r <acr-name> -t pim-mcp:0.6.0 mcp-servers/pim-mcp
 ```
 
 Then set `pimMcpImage` parameter when running `azd up` /

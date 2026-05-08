@@ -1,9 +1,10 @@
 """PIM MCP tool implementations — read-only by construction.
 
-Exposes six tools, all GET-only against Microsoft Graph v1.0:
+Exposes seven tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
 
 - ``list_pending_pim_requests`` — the trigger surface (PendingApproval only)
 - ``get_request_status`` — final disposition of a specific request by ID
+- ``get_request_approver`` — audit trail: who approved/denied, when, with what justification
 - ``list_active_role_assignments`` — currently-active assignments for a principal
 - ``get_user`` — resolve principalId to displayName/UPN/etc.
 - ``get_role_definition`` — resolve roleDefinitionId to displayName/etc.
@@ -15,6 +16,11 @@ requires either:
   through Microsoft's Enterprise MCP preview), or
 - application ``RoleAssignmentSchedule.Read.Directory`` (this server uses this
   via Managed Identity).
+
+``get_request_approver`` calls the **beta** approvals endpoint
+(``/beta/roleManagement/directory/roleAssignmentApprovals/{id}/steps``); it is the
+only tool here that touches beta. It requires the ``PrivilegedAccess.Read.AzureAD``
+application permission on top of the schedule perm.
 
 See https://learn.microsoft.com/en-us/graph/api/rbacapplication-list-roleassignmentschedulerequests
 """
@@ -32,9 +38,11 @@ from fastmcp import FastMCP
 log = logging.getLogger("pim-mcp.tools")
 
 GRAPH_BASE_URL = os.getenv("GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0")
+GRAPH_BETA_BASE_URL = os.getenv("GRAPH_BETA_BASE_URL", "https://graph.microsoft.com/beta")
 GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 PIM_REQUESTS_PATH = "/roleManagement/directory/roleAssignmentScheduleRequests"
 PIM_INSTANCES_PATH = "/roleManagement/directory/roleAssignmentScheduleInstances"
+PIM_APPROVALS_PATH_BETA = "/roleManagement/directory/roleAssignmentApprovals"
 USERS_PATH = "/users"
 ROLE_DEFINITIONS_PATH = "/roleManagement/directory/roleDefinitions"
 
@@ -102,10 +110,19 @@ def _get_credential() -> DefaultAzureCredential:
     return _credential
 
 
-async def _graph_get(path: str, params: dict[str, str] | None = None) -> dict[str, Any]:
-    """Authenticated GET against Microsoft Graph (app-only via MI)."""
+async def _graph_get(path: str, params: dict[str, str] | None = None, *, beta: bool = False) -> dict[str, Any]:
+    """Authenticated GET against Microsoft Graph (app-only via MI).
+
+    Args:
+        path: Graph path beginning with ``/`` (e.g. ``/users/{id}``).
+        params: Optional query string params.
+        beta: When True, hits the ``/beta`` endpoint instead of v1.0.
+            Used only by ``get_request_approver`` (the approvals collection
+            is beta-only).
+    """
     token = _get_credential().get_token(GRAPH_SCOPE).token
-    url = f"{GRAPH_BASE_URL}{path}"
+    base = GRAPH_BETA_BASE_URL if beta else GRAPH_BASE_URL
+    url = f"{base}{path}"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(url, headers=headers, params=params)
@@ -162,7 +179,9 @@ def register_tools(mcp: FastMCP) -> None:
             "hint": (
                 "This tool only returns PendingApproval requests. To check the "
                 "final disposition of a request that is no longer pending, call "
-                "get_request_status(request_id). To see currently-active role "
+                "get_request_status(request_id). To find out who approved/denied "
+                "a request and read their justification, call "
+                "get_request_approver(request_id). To see currently-active role "
                 "assignments for a user, call list_active_role_assignments(principal_id)."
             ),
         }
@@ -300,4 +319,66 @@ def register_tools(mcp: FastMCP) -> None:
             "value": items,
             "@odata.context": raw.get("@odata.context"),
             "count": len(items),
+        }
+
+    @mcp.tool()
+    async def get_request_approver(request_id: str) -> dict[str, Any]:
+        """Get the audit trail for a PIM request: who approved/denied, when, why.
+
+        Two-step lookup performed server-side in one tool call:
+        1. GET the request to find its ``approvalId``.
+        2. GET the approval's ``steps`` collection (beta endpoint) to read each
+           reviewer's identity, decision, timestamp, and justification.
+
+        Use this for compliance / audit questions like "who approved request X?"
+        or "what justification did the approver provide?". Most tenants have a
+        single approval step; multi-stage approval policies return multiple.
+
+        Read-only. Beta endpoint. Requires the ``PrivilegedAccess.Read.AzureAD``
+        application permission on the server's managed identity (in addition to
+        ``RoleAssignmentSchedule.Read.Directory`` for the request lookup).
+
+        Args:
+            request_id: GUID of the role assignment schedule request.
+
+        Returns:
+            JSON object with:
+              - ``requestId``: echo of the input
+              - ``approvalId``: the approval record ID (often equal to requestId)
+              - ``requestStatus``: current request status (Provisioned/Denied/...)
+              - ``steps``: array of approval step objects, each with
+                ``id``, ``status`` (NotStarted/InProgress/Completed),
+                ``reviewResult`` (Approve/Deny/NotReviewed), ``reviewedDateTime``,
+                ``justification``, and ``reviewedBy`` (id, displayName, userPrincipalName).
+        """
+        if not request_id or not isinstance(request_id, str):
+            raise ValueError("request_id must be a non-empty string (GUID)")
+        log.info("get_request_approver request_id=%s", request_id)
+
+        # Step 1: get the request to find approvalId + status (v1.0).
+        request = await _graph_get(
+            f"{PIM_REQUESTS_PATH}/{request_id}",
+            params={"$select": "id,status,approvalId"},
+        )
+        approval_id = request.get("approvalId")
+        if not approval_id:
+            return {
+                "requestId": request_id,
+                "approvalId": None,
+                "requestStatus": request.get("status"),
+                "steps": [],
+                "note": "Request has no approvalId — it was likely auto-approved (no approver in policy) or self-activated without approval gate.",
+            }
+
+        # Step 2: get the approval steps (beta).
+        approval = await _graph_get(
+            f"{PIM_APPROVALS_PATH_BETA}/{approval_id}/steps",
+            beta=True,
+        )
+        return {
+            "requestId": request_id,
+            "approvalId": approval_id,
+            "requestStatus": request.get("status"),
+            "steps": approval.get("value", []),
+            "@odata.context": approval.get("@odata.context"),
         }

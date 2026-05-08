@@ -49,7 +49,7 @@ and the standalone deck
 
 | Layer | What it covers | Status |
 |---|---|---|
-| **Layer 1 — gap-filler infra** | `pim-mcp` **0.5.0** deployed to Container Apps (Streamable-HTTP at `/mcp`); MI bound to Graph with `RoleAssignmentSchedule.Read.Directory` + `User.Read.All` + `RoleManagement.Read.Directory`; 6 tools (`list_pending_pim_requests`, `get_request_status`, `list_active_role_assignments`, `get_user`, `get_role_definition`, `health`); smoke test green | ✅ |
+| **Layer 1 — gap-filler infra** | `pim-mcp` **0.6.0** deployed to Container Apps (Streamable-HTTP at `/mcp`); MI bound to Graph with `RoleAssignmentSchedule.Read.Directory` + `User.Read.All` + `RoleManagement.Read.Directory` + `PrivilegedAccess.Read.AzureAD`; 7 tools (`list_pending_pim_requests`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `get_user`, `get_role_definition`, `health`); smoke test green | ✅ |
 | **Layer 2 — Graph plumbing** | Test users created (`pim-requester`, `pim-approver`); eligibility assigned (`Provisioned`); approval policy patched (`isApprovalRequired=true`); requester self-activation lands `PendingApproval` | ✅ |
 | **Layer 1 ↔ 2 chain** | `list_pending_pim_requests` returns the live PendingApproval request with matching GUID, justification, ticket info | ✅ |
 | **Layer 3 — Foundry agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, 4 tools selected); confirmed alongside grafana-mcp + jira-mcp | ✅ |

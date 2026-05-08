@@ -1,7 +1,7 @@
 [project]
 name = "pim-mcp"
-version = "0.5.0"
-description = "PIM gap-filler MCP — read-only Graph proxy (pending requests, request status, active assignments, user/role lookups, streamable-http)"
+version = "0.6.0"
+description = "PIM gap-filler MCP — read-only Graph proxy (pending requests, request status, active assignments, approver audit, user/role lookups, streamable-http)"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=0.4.0",
