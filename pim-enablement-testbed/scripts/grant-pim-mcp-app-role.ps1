@@ -46,7 +46,11 @@ param(
         'RoleManagement.Read.Directory',
         # Required by `get_request_approver` (Graph beta
         # /roleManagement/directory/roleAssignmentApprovals/{id}/steps).
-        'PrivilegedAccess.Read.AzureAD'
+        'PrivilegedAccess.Read.AzureAD',
+        # Required by `get_user_group_memberships` (added 0.9.0; closes
+        # validation rule R004). Read-only transitive group memberships:
+        # GET /users/{id}/transitiveMemberOf.
+        'GroupMember.Read.All'
     )
 )
 

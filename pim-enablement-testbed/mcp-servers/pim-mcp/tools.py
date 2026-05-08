@@ -1,16 +1,24 @@
 """PIM MCP tool implementations — read-only by construction.
 
-Exposes nine tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
+Exposes ten tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
 
 - ``list_pending_pim_requests`` — the trigger surface (PendingApproval only)
-- ``list_pim_request_history`` — historical requests filtered by status (added 0.8.0)
+- ``list_pim_request_history`` — historical requests filtered by status / requester /
+  time window (status + principal_id added 0.8.0; window_hours added 0.9.0)
 - ``get_request_status`` — final disposition of a specific request by ID
 - ``get_request_approver`` — audit trail: who approved/denied, when, with what justification
 - ``list_active_role_assignments`` — currently-active assignments for a principal
 - ``list_eligible_role_assignments`` — PIM-eligible assignments (added 0.7.0)
 - ``get_user`` — resolve principalId to displayName/UPN/etc.
+- ``get_user_group_memberships`` — transitive group memberships for a principal
+  (added 0.9.0; closes validation rule R004)
 - ``get_role_definition`` — resolve roleDefinitionId to displayName/etc.
 - ``health`` — liveness probe
+
+All responses that include a ``directoryScopeId`` are decorated server-side with
+a human-readable ``directoryScopeLabel`` field (added 0.9.0). The label is
+derived purely from the scope string — no extra Graph call. Unrecognised
+patterns leave the label ``None``.
 
 The primary endpoint (``/v1.0/roleManagement/directory/roleAssignmentScheduleRequests``)
 requires either:
@@ -31,6 +39,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -48,6 +58,8 @@ PIM_ELIGIBLE_INSTANCES_PATH = "/roleManagement/directory/roleEligibilitySchedule
 PIM_APPROVALS_PATH_BETA = "/roleManagement/directory/roleAssignmentApprovals"
 USERS_PATH = "/users"
 ROLE_DEFINITIONS_PATH = "/roleManagement/directory/roleDefinitions"
+
+GROUP_MEMBERSHIP_DEFAULT_SELECT = "id,displayName,description,groupTypes,securityEnabled,mailEnabled,mailNickname"
 
 USER_DEFAULT_SELECT = "id,displayName,userPrincipalName,mail,jobTitle,department,accountEnabled"
 # Note: ``isPrivileged`` exists in beta but not v1.0 of unifiedRoleDefinition;
@@ -216,8 +228,67 @@ async def _graph_get(path: str, params: dict[str, str] | None = None, *, beta: b
         return resp.json()
 
 
+# ---------------------------------------------------------------------------
+# Scope label helper (0.9.0)
+# ---------------------------------------------------------------------------
+# PIM `directoryScopeId` values are opaque to humans (e.g. ``/`` means
+# tenant-wide). We attach a ``directoryScopeLabel`` next to every scope-bearing
+# row so the agent and any downstream UI can show readable text without an
+# extra Graph round-trip. Pattern-matching only \u2014 no Graph calls.
+
+_AU_RE = re.compile(r"^/administrativeUnits/(?P<id>[0-9a-fA-F-]{36})$")
+_SUB_RE = re.compile(r"^/subscriptions/(?P<sub>[0-9a-fA-F-]{36})$")
+_RG_RE = re.compile(
+    r"^/subscriptions/(?P<sub>[0-9a-fA-F-]{36})/resourceGroups/(?P<rg>[^/]+)$",
+    re.IGNORECASE,
+)
+
+
+def _resolve_directory_scope_label(scope_id: str | None) -> str | None:
+    """Translate a PIM ``directoryScopeId`` into a human-readable label.
+
+    Returns ``None`` for unrecognised scope strings so callers can decide
+    whether to omit the label or echo the raw ID.
+    """
+    if not scope_id:
+        return None
+    if scope_id == "/":
+        return "Entire directory (tenant-wide)"
+    if scope_id.startswith("/roleManagement/directory"):
+        return "Directory role management"
+    m = _AU_RE.match(scope_id)
+    if m:
+        return f"Administrative Unit ({m.group('id')})"
+    m = _RG_RE.match(scope_id)
+    if m:
+        return f"Resource Group '{m.group('rg')}' in subscription {m.group('sub')}"
+    m = _SUB_RE.match(scope_id)
+    if m:
+        return f"Subscription {m.group('sub')}"
+    return None
+
+
+def _decorate_scope(row: dict[str, Any]) -> dict[str, Any]:
+    """Add ``directoryScopeLabel`` to a row that carries ``directoryScopeId``.
+
+    Mutates and returns the same dict for convenience. No-op when the field
+    is absent or already labelled.
+    """
+    if not isinstance(row, dict):
+        return row
+    if "directoryScopeId" in row and "directoryScopeLabel" not in row:
+        row["directoryScopeLabel"] = _resolve_directory_scope_label(row.get("directoryScopeId"))
+    return row
+
+
+def _decorate_scope_list(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for r in rows:
+        _decorate_scope(r)
+    return rows
+
+
 def register_tools(mcp: FastMCP) -> None:
-    """Register the single PIM read tool with the MCP server."""
+    """Register the PIM read tools with the MCP server."""
 
     @mcp.tool()
     async def list_pending_pim_requests(top: int = 25) -> dict[str, Any]:
@@ -248,6 +319,7 @@ def register_tools(mcp: FastMCP) -> None:
         raw = await _graph_get(PIM_REQUESTS_PATH, params)
         all_items = raw.get("value", [])
         pending = [r for r in all_items if r.get("status") == "PendingApproval"][:top]
+        _decorate_scope_list(pending)
         return {
             "value": pending,
             "@odata.context": raw.get("@odata.context"),
@@ -294,6 +366,62 @@ def register_tools(mcp: FastMCP) -> None:
             f"{USERS_PATH}/{principal_id}",
             params={"$select": USER_DEFAULT_SELECT},
         )
+
+    @mcp.tool()
+    async def get_user_group_memberships(
+        principal_id: str,
+        top: int = 100,
+    ) -> dict[str, Any]:
+        """List the transitive group memberships of a directory principal.
+
+        Calls ``GET /users/{id}/transitiveMemberOf`` to return every group
+        the user belongs to directly *or* through nested group membership.
+        Use this to evaluate validation rule **R004** (group-membership
+        gating) for PIM activation requests — e.g., to confirm the
+        requester is in an approved on-call rotation group before
+        recommending APPROVE.
+
+        Returned rows are filtered server-side to ``#microsoft.graph.group``
+        only (the same call can return ``directoryRole`` rows for users
+        who hold tenant roles directly; those are excluded here so the
+        agent doesn't conflate group membership with role assignment).
+
+        Read-only. Requires ``GroupMember.Read.All`` application
+        permission on the server's managed identity (added 0.9.0).
+
+        Args:
+            principal_id: Entra ID object ID (GUID) of the user.
+            top: Max rows to return (1-200). Defaults to 100.
+
+        Returns:
+            JSON object with:
+              - ``value``: array of group objects, each with ``id``,
+                ``displayName``, ``description``, ``groupTypes``,
+                ``securityEnabled``, ``mailEnabled``, ``mailNickname``.
+              - ``count``: number of rows returned.
+              - ``principalId``: echo of the input.
+        """
+        if not principal_id or not isinstance(principal_id, str):
+            raise ValueError("principal_id must be a non-empty string (Entra object ID)")
+        top = max(1, min(int(top), 200))
+        log.info("get_user_group_memberships principal_id=%s top=%d", principal_id, top)
+        raw = await _graph_get(
+            f"{USERS_PATH}/{principal_id}/transitiveMemberOf",
+            params={
+                "$select": GROUP_MEMBERSHIP_DEFAULT_SELECT,
+                "$top": str(top),
+            },
+        )
+        items = raw.get("value", [])
+        # Keep groups only — drop any directoryRole rows so callers can
+        # treat the response as "groups the user belongs to".
+        groups = [r for r in items if r.get("@odata.type") == "#microsoft.graph.group"]
+        return {
+            "value": groups,
+            "@odata.context": raw.get("@odata.context"),
+            "count": len(groups),
+            "principalId": principal_id,
+        }
 
     @mcp.tool()
     async def get_role_definition(role_definition_id: str) -> dict[str, Any]:
@@ -349,10 +477,11 @@ def register_tools(mcp: FastMCP) -> None:
         if not request_id or not isinstance(request_id, str):
             raise ValueError("request_id must be a non-empty string (GUID)")
         log.info("get_request_status request_id=%s", request_id)
-        return await _graph_get(
+        result = await _graph_get(
             f"{PIM_REQUESTS_PATH}/{request_id}",
             params={"$select": REQUEST_STATUS_SELECT},
         )
+        return _decorate_scope(result)
 
     @mcp.tool()
     async def list_active_role_assignments(
@@ -392,6 +521,7 @@ def register_tools(mcp: FastMCP) -> None:
         log.info("list_active_role_assignments principal_id=%s top=%d", principal_id, top)
         raw = await _graph_get(PIM_INSTANCES_PATH, params)
         items = raw.get("value", [])
+        _decorate_scope_list(items)
         return {
             "value": items,
             "@odata.context": raw.get("@odata.context"),
@@ -454,6 +584,7 @@ def register_tools(mcp: FastMCP) -> None:
         )
         raw = await _graph_get(PIM_ELIGIBLE_INSTANCES_PATH, params)
         items = raw.get("value", [])
+        _decorate_scope_list(items)
         return {
             "value": items,
             "@odata.context": raw.get("@odata.context"),
@@ -464,6 +595,7 @@ def register_tools(mcp: FastMCP) -> None:
     async def list_pim_request_history(
         status: str | None = None,
         principal_id: str | None = None,
+        window_hours: int | None = None,
         top: int = 25,
     ) -> dict[str, Any]:
         """List historical PIM role-assignment requests (any status except pending).
@@ -497,6 +629,10 @@ def register_tools(mcp: FastMCP) -> None:
                 ``list_pending_pim_requests`` for those.
             principal_id: Optional Entra Object ID (GUID) to filter by
                 requester. When omitted, returns rows for all principals.
+            window_hours: Optional time window. When provided, only rows
+                with ``createdDateTime`` within the last N hours are
+                returned. Useful for activation-frequency checks (rule
+                R008) and "last 24h" audit views. Must be 1..720 (30 days).
             top: Max rows to return after client-side filtering (1-100).
                 Defaults to 25.
 
@@ -504,13 +640,20 @@ def register_tools(mcp: FastMCP) -> None:
             JSON object with a ``value`` array sorted by
             ``createdDateTime`` desc (most recent first). Each row
             includes id, status, action, principalId, roleDefinitionId,
-            directoryScopeId, justification, createdDateTime,
+            directoryScopeId, ``directoryScopeLabel`` (0.9.0 — human
+            readable scope), justification, createdDateTime,
             scheduleInfo, ticketInfo. Diagnostics fields:
             ``fetchedCount`` (raw page size from Graph),
             ``matchedCount`` (rows that passed the filter),
             ``returnedCount`` (rows after ``top`` trim).
         """
         top = max(1, min(int(top), 100))
+        cutoff: datetime | None = None
+        if window_hours is not None:
+            window_hours_int = int(window_hours)
+            if window_hours_int < 1 or window_hours_int > 720:
+                raise ValueError("window_hours must be between 1 and 720 (30 days)")
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours_int)
         # Over-fetch the maximum page Graph allows (100), then filter
         # client-side. BUG-002: $filter/$orderby/$expand all rejected.
         params = {
@@ -518,9 +661,10 @@ def register_tools(mcp: FastMCP) -> None:
             "$top": "100",
         }
         log.info(
-            "list_pim_request_history status=%s principal_id=%s top=%d",
+            "list_pim_request_history status=%s principal_id=%s window_hours=%s top=%d",
             status or "<any-non-pending>",
             principal_id or "<all>",
+            window_hours if window_hours is not None else "<all>",
             top,
         )
         raw = await _graph_get(PIM_REQUESTS_PATH, params)
@@ -540,18 +684,31 @@ def register_tools(mcp: FastMCP) -> None:
                 return False
             if principal_id and row.get("principalId") != principal_id:
                 return False
+            if cutoff is not None:
+                created = row.get("createdDateTime")
+                if not created:
+                    return False
+                try:
+                    # Graph returns ISO-8601 with trailing Z; parse as UTC.
+                    parsed = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    return False
+                if parsed < cutoff:
+                    return False
             return True
 
         matched = [r for r in all_items if _matches(r)]
         # Sort newest-first by createdDateTime (string ISO-8601 sorts correctly).
         matched.sort(key=lambda r: r.get("createdDateTime") or "", reverse=True)
         trimmed = matched[:top]
+        _decorate_scope_list(trimmed)
         return {
             "value": trimmed,
             "@odata.context": raw.get("@odata.context"),
             "fetchedCount": len(all_items),
             "matchedCount": len(matched),
             "returnedCount": len(trimmed),
+            "windowHours": window_hours,
             "hint": (
                 "Historical requests only (PendingApproval excluded). For "
                 "a specific known request ID, prefer get_request_status. "

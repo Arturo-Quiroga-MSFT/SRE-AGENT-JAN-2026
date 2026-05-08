@@ -1,7 +1,7 @@
 # PIM MCP Server — read-only Graph proxy (ACTIVE)
 
-> **Status: ACTIVE as of May 8, 2026.** Image **0.8.0**. Streamable-HTTP at `/mcp`.
-> Nine tools: `list_pending_pim_requests`, `list_pim_request_history`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_role_definition`, `health`.
+> **Status: ACTIVE as of May 8, 2026.** Image **0.9.0**. Streamable-HTTP at `/mcp`.
+> Ten tools: `list_pending_pim_requests`, `list_pim_request_history`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_user_group_memberships`, `get_role_definition`, `health`.
 > Uses **app-only** Graph auth via Managed Identity. One tool (`get_request_approver`) hits the Graph **beta** endpoint; the other eight are v1.0.
 >
 > **Scope expanded May 8, 2026** beyond the original 1-tool gap-filler. The SRE Agent's MCP connector wizard does not yet support delegated-OAuth, which blocks wiring Microsoft's Enterprise MCP server. We extended this server with a minimal user/role-resolver surface plus request-disposition, active-assignment, and approver-audit lookups as a tactical workaround. Track the strategic fix (OAuth in the wizard) and contract this server back to its original 1-tool gap-filler scope when Enterprise MCP becomes wireable.
@@ -45,18 +45,24 @@ This server uses a Managed Identity (app-only) to read pending requests.
   user. Document this distinction for the banking-compliance review.
 - All Graph calls are captured in **Microsoft Graph activity logs**
   filterable by the MI's App ID.
+- **Scope label enrichment (0.9.0)** — every response row that carries a
+  `directoryScopeId` is decorated with a human-readable
+  `directoryScopeLabel` (`/` → `Entire directory (tenant-wide)`,
+  `/administrativeUnits/{id}` → `Administrative Unit ({id})`, etc.).
+  Pure string-matching, no extra Graph calls.
 
 ## Tools
 
 | Tool | Purpose |
 |---|---|
 | `list_pending_pim_requests(top=25)` | List PIM requests with `status eq 'PendingApproval'`. Returns ID, principal/role/scope, justification, ticket info, schedule. Response includes a `hint` directing the agent to the disposition / approver / active-assignment tools for follow-ups. |
-| `list_pim_request_history(status?, principal_id?, top=25)` | Browse historical (non-pending) requests — Provisioned, Denied, Cancelled, Expired, etc. Optional status + requester filters. **Added 0.8.0** to close the "browse all requests" gap (Graph holds full history; `list_pending_pim_requests` only surfaced the PendingApproval subset). Same Graph permission as the pending-requests tool, so no new app-role grant. Sorted newest-first. |
+| `list_pim_request_history(status?, principal_id?, window_hours?, top=25)` | Browse historical (non-pending) requests — Provisioned, Denied, Cancelled, Expired, etc. Optional status, requester, and time-window filters. **Added 0.8.0** to close the "browse all requests" gap; **`window_hours` added 0.9.0** to support activation-frequency / last-N-hours audits (closes rule R008). Same Graph permission as the pending-requests tool, so no new app-role grant. Sorted newest-first. |
 | `get_request_status(request_id)` | Get the current state of any PIM request by ID — closes the disposition gap (approved / denied / cancelled / expired) for requests no longer in PendingApproval. |
 | `get_request_approver(request_id)` | Audit trail: who approved/denied the request, when, and with what justification. Hits the Graph **beta** approvals endpoint (`/roleManagement/directory/roleAssignmentApprovals/{id}/steps`). Returns the full `steps` array (multi-stage approval policies return multiple rows). |
 | `list_active_role_assignments(principal_id, top=25)` | List currently-active role assignments for a principal from `roleAssignmentScheduleInstances`. Use post-approval to verify a requester actually holds the role. |
 | `list_eligible_role_assignments(principal_id?, top=50)` | List PIM-eligible assignments from `roleEligibilityScheduleInstances` — who *could* activate which role. Optional `principal_id` filter; otherwise tenant-wide. **Added 0.7.0** as an Azure-SRE-Agent-side workaround (Enterprise MCP can serve this endpoint, but the SRE Agent connector wizard can't wire Enterprise MCP yet). Removable when that wizard supports delegated OAuth. |
 | `get_user(principal_id)` | Resolve an Entra ID object ID to displayName, UPN, mail, jobTitle, department, accountEnabled. |
+| `get_user_group_memberships(principal_id, top=100)` | List a user's transitive group memberships from `/users/{id}/transitiveMemberOf`. **Added 0.9.0** to close validation rule **R004** (group-membership gating, previously stuck on REVIEW MANUALLY). Filters Graph response to `#microsoft.graph.group` rows only. |
 | `get_role_definition(role_definition_id)` | Resolve a directory role definition GUID to displayName, description, isBuiltIn, resourceScopes. |
 | `health()` | Liveness probe. |
 
@@ -69,6 +75,7 @@ Grant to the agent's User-Assigned Managed Identity:
 | `RoleAssignmentSchedule.ReadWrite.Directory` | `list_pending_pim_requests` — actually required by Graph runtime even for read (UPSTREAM_BUGS BUG-001). Latent only — server registers no write tools. |
 | `RoleAssignmentSchedule.Read.Directory` | `list_pending_pim_requests`, `get_request_status`, `get_request_approver` (request lookup), `list_active_role_assignments` — documented least-privilege scope. |
 | `User.Read.All` | `get_user` — added 2026-05-08. |
+| `GroupMember.Read.All` | `get_user_group_memberships` — added 0.9.0. Read-only transitive group memberships. |
 | `RoleManagement.Read.Directory` | `get_role_definition`, `list_eligible_role_assignments` — added 2026-05-08. Also covers `roleEligibilityScheduleInstances`, so no separate `RoleEligibilitySchedule.Read.Directory` grant needed. |
 | `PrivilegedAccess.Read.AzureAD` | `get_request_approver` (approval steps lookup, beta endpoint) — added 2026-05-08. |
 
