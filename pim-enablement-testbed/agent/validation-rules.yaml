@@ -52,8 +52,11 @@ rules:
     predicate:
       type: group_membership_any
       values:
-        - "PLACEHOLDER-group-objectid-oncall-prod"
-        - "PLACEHOLDER-group-objectid-oncall-platform"
+        # TEMP — test-tenant on-call group (MngEnvMCAP094150). Remove before
+        # Zafin handoff and replace with the real D1 group IDs:
+        #   - "PLACEHOLDER-group-objectid-oncall-prod"
+        #   - "PLACEHOLDER-group-objectid-oncall-platform"
+        - "a19dbeba-9826-4954-bde8-effef5dc7e85"  # test-tenant-oncall
 
   - id: R005-role-allowlist
     description: Requested role must be in the approved role list.

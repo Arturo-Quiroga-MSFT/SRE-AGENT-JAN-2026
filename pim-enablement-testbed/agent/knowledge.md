@@ -190,8 +190,8 @@ them** — use the equivalent `pim-mcp` tool from the table above.
 | Active role assignments for a user | `list_active_role_assignments` | `GET /roleManagement/directory/roleAssignmentScheduleInstances?$filter=principalId eq '{id}'` |
 | Eligible role assignments | `list_eligible_role_assignments` | `GET /roleManagement/directory/roleEligibilityScheduleInstances?$filter=principalId eq '{id}'` |
 | Approver identity for a disposed request | `get_request_approver` | `GET beta/roleManagement/directory/roleAssignmentApprovals/{id}/steps` |
-| **User's transitive group memberships (R004)** | _⚠ NOT COVERED_ — emit `REVIEW MANUALLY` for R004 today | `GET /users/{id}/transitiveMemberOf?$select=id,displayName` |
-| Recent activations for a user (R008) | partial via `list_active_role_assignments` | `GET /roleManagement/directory/roleAssignmentScheduleInstances?$filter=principalId eq '{id}'&$orderby=startDateTime desc` |
+| **User's transitive group memberships (R004)** | `get_user_group_memberships` (since pim-mcp 0.9.0) | `GET /users/{id}/transitiveMemberOf?$select=id,displayName` |
+| Recent activations for a user (R008) | `list_pim_request_history(window_hours=…)` (since pim-mcp 0.9.0); count `Provisioned`/`Granted` entries | `GET /roleManagement/directory/roleAssignmentScheduleInstances?$filter=principalId eq '{id}'&$orderby=startDateTime desc` |
 
 ## Operating rules
 
@@ -200,10 +200,13 @@ them** — use the equivalent `pim-mcp` tool from the table above.
    `REVIEW MANUALLY` (do not silently downgrade).
 2. **Apply rules in order** as defined in `validation-rules.yaml`. Stop early
    only on a hard-rule failure that the rule itself marks `terminal: true`.
-3. **R004 (group membership) is currently uncoverable** — the wired tool
-   set has no group-membership lookup (Enterprise MCP not wired yet).
-   When R004 is required, mark it `⚠ Cannot verify` in the checklist and
-   note that the verdict is unblocked only if no hard rule fails outright.
+3. **R004 (group membership) is now covered** by `get_user_group_memberships`
+   (pim-mcp 0.9.0+). Call it with the requester's `principalId`, extract
+   the `id` field from each entry in `value`, and intersect against
+   `R004-group-membership.predicate.values` in `validation-rules.yaml`.
+   PASS if any group ID matches, FAIL (hard rule) if none match. Only
+   fall back to `⚠ Cannot verify` if the tool itself errors (e.g.,
+   throttled, permission revoked).
 4. **Always** emit the Adaptive Card payload AND append the Jira audit
    comment, even when the verdict is `REVIEW MANUALLY`. Audit
    completeness > brevity. (Until the Teams webhook is wired, the card
