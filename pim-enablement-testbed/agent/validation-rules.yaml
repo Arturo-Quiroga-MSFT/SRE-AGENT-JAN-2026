@@ -1,30 +1,44 @@
 # PIM Enablement — Validation Rules
 #
-# PLACEHOLDER content. Zafin owns the real rule table (ask D1).
-# Engine semantics (we own this part):
-#   - Rules are evaluated in order.
-#   - Each rule has: id, description, kind (hard|soft), terminal (bool),
-#     and a typed predicate.
-#   - "hard" failure -> verdict NOT ELIGIBLE.
-#   - "soft" failure -> verdict ELIGIBLE with reduced confidence.
-#   - "terminal: true" stops further evaluation on failure.
+# Schema v2 (Wave A — 2026-05-11): aligned with Zafin's Deterministic Rule Pack
+# (May 2026, see partner-context/ZAFIN_PIM_APPROVER_AGENT_RULE_PACK_MAY2026.md).
 #
-# Predicates supported in V1:
+# Each rule has: id, description, kind (hard|soft), terminal (bool),
+# decision_on_fail (Reject|HumanReview), and a typed predicate.
+#
+# Verdict computation (per Zafin sections 8 and 9):
+#   1. If ANY rule fails with decision_on_fail=HumanReview ->
+#        final verdict = "Human Review Needed" (TRUMPS Reject).
+#   2. Else if ANY rule fails with decision_on_fail=Reject ->
+#        final verdict = "Reject with Remarks".
+#   3. Else all rules pass ->
+#        final verdict = "Approve".
+#
+# This vocabulary mapping replaces the legacy ELIGIBLE / NOT ELIGIBLE / REVIEW
+# MANUALLY strings emitted by the agent prior to Wave A.
+#
+# Predicates supported:
 #   - ticket_state_in: list[str]
 #   - ticket_age_max_hours: int
 #   - requester_assignee_match: bool
-#   - group_membership_any: list[str]   # group object IDs
-#   - role_in_allowlist: list[str]      # role definition IDs or display names
+#   - group_membership_any: list[str]                       # group object IDs
+#   - role_in_allowlist: list[str]                          # role display names or definition IDs
+#   - role_in_high_risk_catalog: list[str]                  # Wave A — Zafin Table 4
 #   - scope_prefix_in_allowlist: list[str]
+#   - scope_is_tenant_root: bool                            # Wave A — Zafin PIM-026
+#   - scope_is_management_group: bool                       # Wave A — Zafin PIM-027
 #   - activation_duration_max_hours: int
 #   - recent_activations_max: { window_hours: int, count: int }
+#
+# PLACEHOLDER values remain where Zafin must supply real allowlists (Wave C).
 
-version: 1
+version: 2
 rules:
   - id: R001-ticket-exists
     description: Linked Jira ticket must exist and be readable.
     kind: hard
-    terminal: true
+    terminal: false                              # Wave A — no longer terminal; each ticket predicate runs independently in Wave B.
+    decision_on_fail: Reject                     # Zafin PIM-006: missing/unresolvable ticket -> Reject with Remarks.
     predicate:
       type: ticket_state_in
       values: ["Open", "In Progress", "In Review", "Investigating"]
@@ -33,6 +47,7 @@ rules:
     description: Linked ticket must be opened within the last 72 hours.
     kind: hard
     terminal: false
+    decision_on_fail: HumanReview                # Zafin PIM-009: stale tickets -> Human Review (may still represent valid work).
     predicate:
       type: ticket_age_max_hours
       value: 72
@@ -41,6 +56,7 @@ rules:
     description: Requester must be the assignee of the linked ticket.
     kind: hard
     terminal: false
+    decision_on_fail: Reject                     # Zafin PIM-013: no requester<->ticket relationship -> Reject.
     predicate:
       type: requester_assignee_match
       value: true
@@ -49,41 +65,83 @@ rules:
     description: Requester must belong to one of the approved on-call groups.
     kind: hard
     terminal: false
+    decision_on_fail: Reject                     # Zafin PIM-014: not in authorized group -> Reject.
     predicate:
       type: group_membership_any
       values:
-        # TEMP — test-tenant on-call group (MngEnvMCAP094150). Remove before
-        # Zafin handoff and replace with the real D1 group IDs:
+        # TEMP -- test-tenant on-call group (MngEnvMCAP094150). Replace with
+        # Zafin's real group IDs before partner handoff:
         #   - "PLACEHOLDER-group-objectid-oncall-prod"
         #   - "PLACEHOLDER-group-objectid-oncall-platform"
         - "a19dbeba-9826-4954-bde8-effef5dc7e85"  # test-tenant-oncall
 
   - id: R005-role-allowlist
-    description: Requested role must be in the approved role list.
+    description: Requested role must be in the approved role list for the requester team/function.
     kind: hard
     terminal: false
+    decision_on_fail: Reject                     # Zafin PIM-017: role not in allowlist -> Reject.
     predicate:
       type: role_in_allowlist
       values:
         - "Reader"
         - "Monitoring Reader"
         - "Log Analytics Reader"
-        - "Contributor"   # PLACEHOLDER — Zafin to confirm
+        - "Contributor"                          # PLACEHOLDER -- Zafin Wave C to confirm.
+
+  - id: R005b-role-high-risk
+    description: |
+      Zafin Table 4 -- High-risk role catalog. Even if a role passes R005,
+      high-risk and critical roles must route to a human approver.
+    kind: hard
+    terminal: false
+    decision_on_fail: HumanReview                # Zafin PIM-018 + Table 4: high-risk/critical -> Human Review Needed (NOT Reject).
+    predicate:
+      type: role_in_high_risk_catalog
+      values:
+        - "Owner"
+        - "User Access Administrator"
+        - "Global Administrator"
+        - "Privileged Role Administrator"
+        - "Conditional Access Administrator"
+        - "Security Administrator"
+        - "Key Vault Administrator"
+        - "Billing Administrator"
+        - "Compliance Administrator"
 
   - id: R006-scope-allowlist
     description: Requested scope must start with an approved prefix.
     kind: hard
     terminal: false
+    decision_on_fail: Reject                     # Zafin PIM-022: team not authorized for scope -> Reject.
     predicate:
       type: scope_prefix_in_allowlist
       values:
         - "/subscriptions/PLACEHOLDER-sub-id/resourceGroups/rg-prod-"
         - "/subscriptions/PLACEHOLDER-sub-id/resourceGroups/rg-platform-"
 
+  - id: R006b-scope-tenant-root
+    description: Tenant-wide ("/") scope requires manual review per Zafin PIM-026.
+    kind: hard
+    terminal: false
+    decision_on_fail: HumanReview                # Zafin PIM-026: tenant/identity-wide -> Human Review Needed.
+    predicate:
+      type: scope_is_tenant_root
+      value: true
+
+  - id: R006c-scope-mgmt-group
+    description: Management-group / root scope requires manual review per Zafin PIM-027.
+    kind: hard
+    terminal: false
+    decision_on_fail: HumanReview                # Zafin PIM-027: MG/root scope -> Human Review Needed.
+    predicate:
+      type: scope_is_management_group
+      value: true
+
   - id: R007-duration-cap
-    description: Activation duration must not exceed 8 hours.
+    description: Activation duration must not exceed 8 hours (single-cap; Wave C will replace with min() across role/scope/ticket/change-window).
     kind: soft
     terminal: false
+    decision_on_fail: Reject                     # Zafin DUR-003: exceeds role/scope max -> Reject.
     predicate:
       type: activation_duration_max_hours
       value: 8
@@ -92,6 +150,7 @@ rules:
     description: Requester has not activated this role more than 3 times in the last 24 hours.
     kind: soft
     terminal: false
+    decision_on_fail: HumanReview                # Zafin PIM-041: repeated requests above threshold -> Human Review Needed.
     predicate:
       type: recent_activations_max
       window_hours: 24

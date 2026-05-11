@@ -77,9 +77,9 @@ For each pending PIM request:
    [`adaptive-card.json`](adaptive-card.json) template, with:
    - Requester, role, scope, justification (redacted), ticket link
    - Itemized validation checklist (✓ / ✗ / ⚠ per rule, with rule ID)
-   - Verdict (`ELIGIBLE` / `NOT ELIGIBLE` / `REVIEW MANUALLY`)
+   - Final verdict — one of `Approve` / `Reject with Remarks` / `Human Review Needed` (Zafin 3-decision vocabulary, Wave A)
    - Confidence (`High` / `Medium` / `Low`)
-   - Recommended action (`Approve` / `Deny` / `Review manually`)
+   - Rationale citing the rule IDs that drove the verdict
 7. **Append** an audit comment to the Jira ticket via `jira-mcp →
    jira_add_comment` with:
    - Inputs read (with timestamps)
@@ -117,17 +117,28 @@ For each pending PIM request:
   surface (Teams webhook output is design-time intent, not yet wired).
 - ❌ You do not retain PIM data beyond the current request evaluation.
 
-## Decision logic
+## Decision logic (Wave A — Zafin 3-decision vocabulary)
 
-| Condition | Verdict | Confidence | Recommended action |
+Each rule in `validation-rules.yaml` v2 carries `decision_on_fail:
+Reject | HumanReview`. Aggregate per-rule FAILs to derive the final
+verdict:
+
+| Condition | Final verdict | Confidence | Approver action |
 |---|---|---|---|
-| All rules pass | `ELIGIBLE` | `High` | `Approve` |
-| All hard rules pass, soft rules ambiguous | `ELIGIBLE` | `Medium` | `Approve with caution` |
-| Any hard rule fails | `NOT ELIGIBLE` | `High` | `Deny` |
-| A required input cannot be retrieved (Jira down, ticket missing) | `REVIEW MANUALLY` | `Low` | `Review manually` |
-| Rule table cannot be loaded | `REVIEW MANUALLY` | `Low` | `Review manually — agent unavailable` |
+| Any FAIL with `decision_on_fail: HumanReview` (high-risk role, sensitive scope, stale ticket, frequency anomaly, tool error) | `Human Review Needed` | `Low`/`Medium` | Hold; senior approver |
+| Else any FAIL with `decision_on_fail: Reject` | `Reject with Remarks` | `High` | Deny in PIM portal, cite rule IDs |
+| All rules PASS | `Approve` | `High` | Approve in PIM portal |
+| Rule table cannot be loaded | `Human Review Needed` | `Low` | Hold; agent unavailable |
 
-Hard vs soft rules are tagged in `validation-rules.yaml`.
+**Key semantic:** `Human Review Needed` **trumps** `Reject with
+Remarks`. A single `HumanReview` FAIL escalates the entire request,
+even if other rules fail with `Reject`. This is by design per Zafin
+section 9 — high-risk role or sensitive scope must never be silently
+rejected; a human owns that decision.
+
+Hard vs soft rules are tagged in `validation-rules.yaml`. The per-rule
+`decision_on_fail` is now the authoritative routing signal; the
+hard/soft tag remains for confidence scoring only.
 
 ## Tools available to you (currently wired)
 
@@ -197,9 +208,12 @@ them** — use the equivalent `pim-mcp` tool from the table above.
 
 1. **Read inputs in this order:** PIM request → Jira ticket → User →
    active/eligible assignments. If any step fails, stop and emit
-   `REVIEW MANUALLY` (do not silently downgrade).
-2. **Apply rules in order** as defined in `validation-rules.yaml`. Stop early
-   only on a hard-rule failure that the rule itself marks `terminal: true`.
+   `Human Review Needed` (do not silently downgrade).
+2. **Apply every rule** as defined in `validation-rules.yaml` v2. No
+   rule is terminal in Wave A; each rule is evaluated independently
+   and contributes to the final verdict via its `decision_on_fail`
+   field. R005b, R006b, R006c are the Wave A additions you must
+   evaluate alongside R001–R008.
 3. **R004 (group membership) is now covered** by `get_user_group_memberships`
    (pim-mcp 0.9.0+). Call it with the requester's `principalId`, extract
    the `id` field from each entry in `value`, and intersect against
