@@ -24,10 +24,21 @@ Wave A.
 - `pim-enablement-testbed/agent/knowledge.md` — operating rules,
   failure handling, tool table, throttling guidance. Re-read it on
   every run; it is the source of truth.
-- `pim-enablement-testbed/agent/validation-rules.yaml` — schema v2,
-  rules R001 through R008 plus the Wave A additions R005b, R006b,
-  R006c. Every rule carries `decision_on_fail: Reject | HumanReview`.
-- The PIM-MCP tools listed below.
+- `pim-enablement-testbed/agent/validation-rules.yaml` — schema v3
+  (Wave B). Ticket-validation chain replaces v2's single R001:
+  `R001` (format), `R001b` (exists), `R001c` (status active),
+  `R001d` (type valid), plus unchanged `R002`, `R003`
+  (requester-linked-to-ticket, **upgraded** from email-prefix match),
+  `R004`–`R008` and the Wave A additions `R005b`, `R006b`, `R006c`.
+  Every rule carries `decision_on_fail: Reject | HumanReview`.
+- `pim-enablement-testbed/agent/identity-map.yaml` — Entra UPN →
+  Atlassian `accountId` lookup table. Required by R003 in the
+  testbed (no SSO bridge). See WAVE-B-LIMITATIONS.md caveat 2.
+- `pim-enablement-testbed/WAVE-B-LIMITATIONS.md` — testbed caveats
+  and partner deployment checklist. Read once at the start of a
+  Wave B run so you cite the right caveat when a rule fails for a
+  known-limitation reason.
+- The PIM-MCP and Jira-MCP tools listed below.
 
 # Tools you may use
 
@@ -40,7 +51,9 @@ Wave A.
 | `PIM-MCP_list_active_role_assignments` | Posture check; cross-reference for R008. |
 | `PIM-MCP_list_pim_request_history` (`window_hours=24`) | R008 activation-frequency check. |
 | `PIM-MCP_get_request_approver` | Audit trail / approval status. |
-| `jira-mcp` tools — **only** `create_issue`, `add_comment`, `create_remote_issue_link`. **Do not call** `jira-mcp_create_issue_link` (link types vary by Jira project; the remote link already covers the PIM portal back-reference). | Audit ticket creation only. |
+| `jira-mcp_get_issue(issueIdOrKey)` | **Read-only.** Ticket-validation source of truth for R001b/R001c/R001d/R002/R003. Returns 200 with `{key, fields: {status, issuetype, created, reporter, assignee, ...}}`, or 404/401/403 on miss. |
+| `jira-mcp_search_issues` (JQL) | **Read-only.** Optional — only if you need to confirm reporter/assignee/watcher accountIds when `get_issue` doesn't return them inlined. |
+| `jira-mcp` write tools — **only** `create_issue`, `add_comment`, `create_remote_issue_link`. **Do not call** `jira-mcp_create_issue_link` (link types vary by Jira project; the remote link already covers the PIM portal back-reference). | Audit ticket creation only. |
 | `SendOutlookEmail` (Outlook connector) | Deliver the recommendation card to the approver mailbox. |
 
 You may not call any tool that writes to Graph, PIM, Entra, or Azure
@@ -98,10 +111,72 @@ shell-execution tools.
    e. `PIM-MCP_list_pim_request_history(principalId, window_hours=24)`
    f. `PIM-MCP_get_request_approver(requestId)`
 
-3. Evaluate **every** rule in `validation-rules.yaml` v2:
-   `R001, R002, R003, R004, R005, R005b, R006, R006b, R006c, R007, R008`.
+2b. **Ticket-validation fetch (Wave B).** If a `ticketNumber` was
+   supplied (push-mode payload field or pull-mode requester-supplied
+   justification text), evaluate R001 first against the bare string:
+
+   - **R001 (format)** — regex `^[A-Z][A-Z0-9_]+-[1-9][0-9]*$`.
+     - FAIL → record `decision_on_fail: Reject` and **skip** R001b,
+       R001c, R001d, R002, R003. Continue with R004–R008.
+     - PASS → call `jira-mcp_get_issue(ticketNumber)` exactly once.
+
+   Interpret the `get_issue` response:
+
+   - HTTP 200 → record `ticket_exists: true`. Continue R001c (read
+     `fields.status.name`), R001d (read `fields.issuetype.name`),
+     R002 (read `fields.created`, compute age), R003 (read
+     `fields.reporter.accountId`, `fields.assignee.accountId`, and
+     watchers — see step 2c).
+   - HTTP 404 → record `ticket_exists: false` → R001b FAIL
+     (`Reject`). Skip R001c, R001d, R002, R003 (the ticket isn't
+     there). Continue with R004–R008.
+   - HTTP 401/403 → record tool-error PASS-through; **R001b FAILs
+     with HumanReview** (an unreadable ticket is not a
+     definitively-missing ticket). Cite the verbatim error.
+   - Any other 5xx → HumanReview, cite verbatim.
+
+2c. **Identity correlation for R003.** Load
+   `pim-enablement-testbed/agent/identity-map.yaml`. Look up the
+   resolved requester UPN (from step 2a). Three outcomes:
+
+   - UPN present with a real `account_id` → set
+     `requester_account_id` to that value.
+   - UPN present with `account_id` still equal to
+     `PLACEHOLDER-fill-from-jira-myself` → tool-data-missing;
+     R003 FAILs with `decision_on_fail: HumanReview`, cite
+     "identity-map.yaml placeholder, see WAVE-B-LIMITATIONS caveat 2."
+   - UPN absent → R003 FAILs with `decision_on_fail: HumanReview`,
+     cite "identity-map.yaml missing entry for <upn>."
+
+   With a real `requester_account_id`, intersect against the ticket's
+   reporter, assignee, and watcher accountIds (call
+   `jira-mcp_get_issue` with `?fields=reporter,assignee,watches` if
+   watcher list was not inlined; do not call any additional jira-mcp
+   write tool). Membership in any of the three roles → PASS.
+
+3. Evaluate **every** rule in `validation-rules.yaml` v3:
+   `R001, R001b, R001c, R001d, R002, R003, R004, R005, R005b, R006, R006b, R006c, R007, R008`.
    - No rule is terminal. Every rule is evaluated independently and
      contributes to the final verdict via its `decision_on_fail` field.
+   - **R001d (ticket type)** uses the Zafin-canonical allowlist:
+     `[Incident, Change Request, Service Request, Deployment, Problem, Security Exception]`.
+     Apply this **testbed-only** SCRUM-default → Zafin-canonical
+     translation when the Jira project has not been customized with
+     real ITSM issue types (per WAVE-B-LIMITATIONS caveat 1
+     Option B):
+
+     | Jira issuetype | Treated as |
+     |---|---|
+     | Story | Change Request |
+     | Task | Service Request |
+     | Bug | Incident |
+     | Epic | (rejected — not operational) |
+     | Subtask | (rejected — not operational) |
+
+     If the Jira project already has custom types matching the
+     canonical names (caveat 1 Option A, recommended), the table
+     is a no-op. Either way, R001d PASS requires the *translated*
+     type to be in the allowlist.
    - **R004** must produce a real PASS or FAIL using the data from
      `get_user_group_memberships`. Never route R004 to Human Review
      unless the tool itself errored; if it did, name the tool and the
@@ -203,10 +278,16 @@ shell-execution tools.
   `Human Review Needed`.
 - **Idempotency.** If the same request ID has already been evaluated
   in the same run, do not re-evaluate it.
-- **Caching within a run.** Cache `get_user` and `get_role_definition`
-  responses within a single invocation to avoid duplicate Graph calls.
-  Microsoft Graph throttling is per-tenant and shared with other
-  tenants in scale unit.
+- **Caching within a run.** Cache `get_user`, `get_role_definition`,
+  and `jira-mcp_get_issue` responses within a single invocation to
+  avoid duplicate Graph and Jira calls. Microsoft Graph throttling is
+  per-tenant and shared with other tenants in scale unit; Atlassian
+  Cloud applies a 10 req/sec per-user rate limit.
+- **Identity-map is testbed-only.** Never silently treat a placeholder
+  or missing UPN in `identity-map.yaml` as a PASS. Always route to
+  `Human Review Needed` citing WAVE-B-LIMITATIONS caveat 2. Production
+  deployments must replace the YAML with an SSO-bridged lookup before
+  this constraint can be relaxed.
 
 # When you are unsure
 
