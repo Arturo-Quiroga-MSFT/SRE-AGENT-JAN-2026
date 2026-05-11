@@ -216,7 +216,7 @@ Each wave gets its own branch (`wave-a-vocab-routing`, `wave-b-ticket-validation
 
 | Wave | Branch | Status | Merge commit | Smoke-test log |
 |---|---|---|---|---|
-| A | `wave-a-vocab-routing` | ✅ shipped (2026-05-11) | `ac2d423` (fast-forward of `1b74f7e` + `8dc07a0` + `ac2d423`) | [14.md](SRE-AGENT-CHATS/14.md) (legacy v1 baseline) · [15.md](SRE-AGENT-CHATS/15.md) (Wave A push-mode) · [16.md](SRE-AGENT-CHATS/16.md) (Wave A pull-mode parity) |
+| A | `wave-a-vocab-routing` | ✅ shipped (2026-05-11) | `1b74f7e` + `8dc07a0` + `7b7dd93` (fast-forward to main) | [14.md](SRE-AGENT-CHATS/14.md) (legacy v1 baseline) · [15.md](SRE-AGENT-CHATS/15.md) (Wave A push-mode) · [16.md](SRE-AGENT-CHATS/16.md) (Wave A pull-mode parity) |
 | B | `wave-b-ticket-validation` | ⏸ not started | — | — |
 | C | `wave-c-allowlists-duration` | ⏸ blocked on Zafin Table 1/2 | — | — |
 | D | `wave-d-observability` | ⏸ deferred | — | — |
