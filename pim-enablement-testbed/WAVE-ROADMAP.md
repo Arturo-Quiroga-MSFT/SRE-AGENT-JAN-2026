@@ -157,6 +157,50 @@ Each wave gets its own branch (`wave-a-vocab-routing`, `wave-b-ticket-validation
 
 ---
 
+### Wave E — Event-driven trigger  *(branch: `wave-e-event-trigger`, deferred until A–D land)*
+
+**Effort:** 1–2 days. **Dependency:** Waves A–D shipped and Zafin has signed off on the rule pack output. Also requires the `pim-recommender` agent to be running in an SRE Agent tenant where **HTTP triggers** are available (the surface is shipped per [docs](https://learn.microsoft.com/en-us/azure/sre-agent/http-triggers), visible in **Builder → HTTP triggers** in the portal).
+
+**Closes:** the only remaining piece of the Zafin production posture not addressed by Waves A–D — the **5-minute polling latency** introduced by the scheduled-task trigger. This wave swaps the scheduled task for a Microsoft-Graph-change-notification bridge that pushes each `roleAssignmentScheduleRequest` into the agent within seconds of creation. The scheduled task stays on as a belt-and-suspenders safety net for missed webhook deliveries (Graph can drop notifications under throttling).
+
+**Why this is a separate wave:** the testbed has been intentionally rule-pack-first. We want the deterministic verdict logic to be fully reviewed by Zafin before we change the trigger surface. Swapping triggers is mechanical; swapping verdicts is policy.
+
+**Reference scaffold already in repo:** [`http-trigger-bridge/`](http-trigger-bridge/) — minimal Python Azure Function (UNWIRED) showing the production design. Read its [`README.md`](http-trigger-bridge/README.md) for the architecture diagram and promotion checklist.
+
+**Tasks:**
+
+1. **Create the HTTP trigger in the SRE Agent portal.** Builder → HTTP triggers → **+ Create trigger**. Name: `pim-request-created`. Assigned agent: `pim-recommender`. Autonomy: `Review`. Prompt: a stripped-down variant of the current scheduled-task prompt that says *"the `requestId` field of the input payload identifies the single request to evaluate against R001–R011."* Save and copy the **Trigger URL**.
+2. **Smoke-test the trigger from CLI** with a known good `requestId`:
+   ```bash
+   TOKEN=$(az account get-access-token --resource 59f0a04a-b322-4310-adc9-39ac41e9631e --query accessToken -o tsv)
+   curl -X POST "<TRIGGER_URL>" \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"requestId":"<existing-pending-request-guid>","source":"manual-curl"}'
+   ```
+   Expect `HTTP 202` with a `threadId`. Open the thread in the SRE Agent UI to confirm `pim-recommender` evaluated the request end-to-end and the push-mode branch of Workflow step 1 in `PIM-RECOMMENDER-INSTRUCTIONS.md` fired (already shipped in Wave A — additive, no breaking change to pull mode).
+3. **Promote the `http-trigger-bridge/` scaffold to a deployed Function App.** Add an `infra/main.bicep` provisioning the Function App (Flex Consumption Python 3.11), storage, App Insights, and system-assigned MI. Grant the MI:
+   - `Microsoft.App/agents/threads/write` on the `pim-recommender` agent resource (or whatever custom role the SRE Agent team publishes for HTTP-trigger invocation).
+   - Graph application permission `RoleManagement.Read.Directory`.
+4. **Create the Graph subscription.** One-shot POST to `/admin/create-subscription` against the deployed Function (or `az rest` equivalent). Save the returned subscription `id` into the `GRAPH_SUBSCRIPTION_ID` App Setting so the renewal timer can keep it alive.
+5. **Smoke-test end-to-end:** trigger a `Privileged Role Administrator` activation in the test tenant and confirm the agent runs within seconds (target ≤ 15 s from request creation to thread start) instead of waiting for the cron tick. Capture in `SRE-AGENT-CHATS/<NN>.md` formatted to match siblings.
+6. **Keep the scheduled task running** at 15-minute cadence (loosened from 5 minutes) as a safety net. The agent's push-mode branch is idempotent — if the cron picks up a request the webhook already pushed, the agent should detect the duplicate via the Jira ticket lookup and skip.
+
+**Acceptance criteria:**
+
+- Push-mode invocation works end-to-end against a real activation request, with `source: graph-subscription` visible in the audit ticket.
+- Time-from-request-created-to-agent-thread-started ≤ 15 seconds (p95) over a 10-request sample.
+- Graph subscription survives at least one renewal cycle (≥ 24 h continuous operation).
+- Scheduled-task path still works (regression check — confirm by disabling the bridge for one tick and verifying the cron picks up the orphan).
+
+**Out of scope for this wave:**
+
+- Multi-tenant Graph subscription orchestration (one bridge per tenant; Zafin's onboarding pipeline handles fan-out).
+- API Management front door / WAF (recommended for production but not required for the GA gate).
+- Replacing Outlook delivery with Teams Adaptive Cards (tracked separately as Gap 9 in the section-20 table).
+
+---
+
 ## Branch / merge protocol
 
 1. Create wave branch from `main`: `git checkout -b wave-<letter>-<short-name>`.
@@ -176,3 +220,4 @@ Each wave gets its own branch (`wave-a-vocab-routing`, `wave-b-ticket-validation
 | B | `wave-b-ticket-validation` | ⏸ not started | — | — |
 | C | `wave-c-allowlists-duration` | ⏸ blocked on Zafin Table 1/2 | — | — |
 | D | `wave-d-observability` | ⏸ deferred | — | — |
+| E | `wave-e-event-trigger` | ⏸ deferred until A–D land — scaffold in [`http-trigger-bridge/`](http-trigger-bridge/) | — | — |

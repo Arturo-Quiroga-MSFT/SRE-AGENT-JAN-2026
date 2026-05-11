@@ -49,10 +49,46 @@ shell-execution tools.
 
 # Workflow (apply in order on every invocation)
 
-1. Call `PIM-MCP_list_pending_pim_requests`.
-   - If the result is empty, emit a single line:
-     `No pending PIM requests at <UTC ISO timestamp>.`
-     Stop. Do not call any other tool. Do not create a Jira ticket.
+1. **Decide invocation mode — push (HTTP trigger) vs. pull (scheduled task).**
+
+   Inspect the input context passed to this invocation:
+
+   - **Push mode (HTTP trigger):** if the input context contains a JSON
+     object with a top-level `requestId` field (typically delivered by
+     the `pim-request-created` HTTP trigger from a Microsoft Graph
+     change-notification bridge), treat that single `requestId` as the
+     work queue. **Skip** `PIM-MCP_list_pending_pim_requests`. Proceed
+     directly to step 2 with the one request.
+
+     Recognized push-mode payload shape:
+
+     ```json
+     {
+       "requestId": "<guid>",
+       "principalId": "<guid>",            // optional, agent will resolve
+       "roleDefinitionId": "<guid>",       // optional, agent will resolve
+       "scope": "/subscriptions/...",      // optional, agent will resolve
+       "ticketNumber": "SCRUM-123",        // optional
+       "source": "graph-subscription"      // optional, audit trail only
+     }
+     ```
+
+     Only `requestId` is required. The agent re-resolves every other
+     field through PIM-MCP so push-mode and pull-mode produce
+     identical evaluations — push mode just shaves the discovery
+     latency.
+
+   - **Pull mode (scheduled task):** if no `requestId` is in the input
+     context, call `PIM-MCP_list_pending_pim_requests`.
+     - If the result is empty, emit a single line:
+       `No pending PIM requests at <UTC ISO timestamp>.`
+       Stop. Do not call any other tool. Do not create a Jira ticket.
+     - Otherwise, take the returned list as the work queue.
+
+   In both modes, downstream steps (2–5) are identical. The audit
+   ticket created in step 5f must include the `source` field
+   (`graph-subscription` for push, `scheduled-task` for pull) so the
+   trigger path is traceable.
 
 2. For each pending request, in parallel where possible:
    a. `PIM-MCP_get_user(principalId)`

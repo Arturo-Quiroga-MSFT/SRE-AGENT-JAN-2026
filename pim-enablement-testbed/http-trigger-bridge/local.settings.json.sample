@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "SRE_AGENT_HTTP_TRIGGER_URL": "https://<aq-main>.sre.azure.com/api/v1/httptriggers/trigger/<TRIGGER_ID>",
+    "SRE_AGENT_APP_ID": "59f0a04a-b322-4310-adc9-39ac41e9631e",
+    "GRAPH_SUBSCRIPTION_CLIENT_STATE": "<generate-a-random-32+char-string>",
+    "GRAPH_SUBSCRIPTION_ID": "",
+    "GRAPH_NOTIFICATION_RESOURCE": "/identityGovernance/privilegedAccess/roleAssignmentScheduleRequests?$filter=action eq 'selfActivate' and status eq 'PendingApproval'",
+    "ALLOWED_NOTIFICATION_HOSTS": "graph.microsoft.com"
+  }
+}
