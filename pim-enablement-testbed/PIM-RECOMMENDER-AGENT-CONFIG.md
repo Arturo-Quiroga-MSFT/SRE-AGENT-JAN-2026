@@ -20,7 +20,7 @@ Captures every setting needed to recreate the `pim-recommender` custom agent in 
 
 ## 2. Tools (Choose tools panel)
 
-Three connectors attached. **Visualization should be unchecked** (not used by this workflow; reduces attack surface).
+**Final attached surface: 16 tools** — 10 PIM-MCP + 5 jira-mcp + 1 Outlook. Visualization (`Plot*`) and all default jira-mcp write/read tools outside the audit workflow have been removed to enforce least-privilege and prevent the agent from improvising side-quest tool calls.
 
 ### 2.1 `PIM-MCP` (10 tools — all checked)
 
@@ -35,40 +35,43 @@ Custom MCP server. Streamable-HTTP endpoint.
 | Image | `aqr2d2acr001.azurecr.io/pim-mcp:0.9.0` |
 | Hosting | Container App `ca-pimtest-pimmcp` revision `0000014` in `rg-pim-enablement-testbed` |
 
-**Tools attached (all 10):**
+**Tools attached (all 10 — verified 2026-05-11):**
 
-1. `list_pending_pim_requests`
-2. `get_user`
-3. `get_role_definition`
-4. `get_user_group_memberships` *(added in pim-mcp 0.9.0 — required for R004)*
-5. `list_active_role_assignments`
-6. `list_pim_request_history`
-7. `get_request_approver`
-8. `get_request_status`
-9. `health`
-10. *(reserved — confirm against `pim-mcp` `/mcp` tool listing)*
+1. `PIM-MCP_list_pending_pim_requests` — queue discovery (called first every run)
+2. `PIM-MCP_get_user` — resolve requester from `principalId`
+3. `PIM-MCP_get_role_definition` — resolve role from `roleDefinitionId`
+4. `PIM-MCP_get_user_group_memberships` — **R004** transitive group check *(pim-mcp 0.9.0)*
+5. `PIM-MCP_list_active_role_assignments` — posture check, cross-reference for R008
+6. `PIM-MCP_list_eligible_role_assignments` — eligibility surface (informational; not used by R001–R008 yet)
+7. `PIM-MCP_list_pim_request_history` — **R008** activation-frequency (`window_hours=24`)
+8. `PIM-MCP_get_request_approver` — approval-status audit trail
+9. `PIM-MCP_get_request_status` — final disposition for non-pending requests
+10. `PIM-MCP_health` — readiness probe (rarely called by agent; useful for manual debugging)
 
-### 2.2 `jira-mcp` (3 tools checked, others unchecked)
+### 2.2 `jira-mcp` (5 tools attached — verified 2026-05-11)
 
-Jira Cloud MCP connector.
+Jira Cloud MCP connector. Surface trimmed from ~50 default tools to the minimum required by R001 and the audit workflow.
 
 | Setting | Value |
 |---|---|
 | Jira site | `https://aq-r2d2.atlassian.net` |
 | Project | `SCRUM` |
 
-**Tools to check (exactly these 3):**
+**Tools attached (exactly these 5):**
 
-- `create_issue`
-- `add_comment`
-- `create_remote_issue_link`
+1. `jira-mcp_jira_search` — **R001** ticket-existence lookup (JQL search by key or title)
+2. `jira-mcp_jira_get_issue` — optional ticket-detail reader (used for R002/R003 state/assignee checks once wired)
+3. `jira-mcp_jira_create_issue` — creates the audit ticket (one per evaluated request)
+4. `jira-mcp_jira_add_comment` — appends the full validation checklist
+5. `jira-mcp_jira_create_remote_issue_link` — PIM portal back-reference on the audit ticket
 
-**Tools to leave unchecked (explicitly):**
+**Explicitly excluded (do not re-add):**
 
-- `create_issue_link` — Instructions forbid this; "Relates to" link types are not configured in SCRUM and the remote link covers the back-reference.
-- All other read tools (`search`, `get_issue`, etc.) may stay checked since `search` is needed for R001 ticket-existence lookup.
+- `jira-mcp_jira_create_issue_link` — link types vary by project; "Relates to" not configured in SCRUM and Instructions forbid this call.
+- `jira-mcp_jira_update_*`, `jira-mcp_jira_transition_*`, `jira-mcp_jira_delete_*`, `jira-mcp_jira_create_sprint`, `jira-mcp_jira_add_watcher`, `jira-mcp_jira_link_to_epic`, etc. — all write verbs outside the Instructions allowlist.
+- All other read tools (`jira_get_all_projects`, `jira_get_board_issues`, `jira_get_transitions`, etc.) — not needed for R001–R008; removing them prevents the agent from improvising side-quests.
 
-> **R001 dependency:** `jira-mcp_search` must be checked — the agent uses it to verify the linked work ticket exists. Without it, R001 falls back to `REVIEW MANUALLY`.
+> **R001 dependency:** `jira-mcp_jira_search` is mandatory — without it the agent falls back to `REVIEW MANUALLY` for R001 on every run.
 
 ### 2.3 `SendOutlookEmail` (Office 365 Outlook connector)
 
@@ -82,9 +85,9 @@ Jira Cloud MCP connector.
 
 > **Cross-tenant note:** the connector must be authorized with a mailbox in the same tenant as the agent host. Cross-tenant Outlook sending is blocked.
 
-### 2.4 `Visualization` — **uncheck**
+### 2.4 `Visualization` (`Plot*` tools) — **removed**
 
-Not used by the PIM evaluation workflow. Unchecking reduces attack surface and avoids accidental chart-generation calls.
+`PlotAreaChartWithCorrelation`, `PlotBarChart`, `PlotHeatmap`, `PlotPieChart`, `PlotScatter` are not used by the PIM evaluation workflow and have been removed from the toolset. Do not re-add unless a future rule requires chart output in the Adaptive Card.
 
 ---
 
