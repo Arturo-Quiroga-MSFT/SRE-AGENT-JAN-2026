@@ -1,7 +1,9 @@
 # PIM Enablement — Validation Rules
 #
-# Schema v2 (Wave A — 2026-05-11): aligned with Zafin's Deterministic Rule Pack
-# (May 2026, see partner-context/ZAFIN_PIM_APPROVER_AGENT_RULE_PACK_MAY2026.md).
+# Schema v3 (Wave B — 2026-05-11): adds real Jira ticket validation predicates
+# (PIM-005..PIM-013 from Zafin's Deterministic Rule Pack). The Wave A vocabulary
+# (Approve / Reject with Remarks / Human Review Needed) and HumanReview-trumps-
+# Reject aggregation are unchanged.
 #
 # Each rule has: id, description, kind (hard|soft), terminal (bool),
 # decision_on_fail (Reject|HumanReview), and a typed predicate.
@@ -14,13 +16,16 @@
 #   3. Else all rules pass ->
 #        final verdict = "Approve".
 #
-# This vocabulary mapping replaces the legacy ELIGIBLE / NOT ELIGIBLE / REVIEW
-# MANUALLY strings emitted by the agent prior to Wave A.
-#
 # Predicates supported:
-#   - ticket_state_in: list[str]
-#   - ticket_age_max_hours: int
-#   - requester_assignee_match: bool
+#   - ticket_id_format_match: regex                         # Wave B — PIM-005 (format check before Jira call)
+#   - ticket_exists: bool                                   # Wave B — PIM-006 (jira_get_issue 200 vs 404)
+#   - ticket_state_in: list[str]                            # status whitelist (open/in-progress/etc.)
+#   - ticket_state_not_in: list[str]                        # Wave B — PIM-007 (closed/done/cancelled blocklist)
+#   - ticket_type_in: list[str]                             # Wave B — PIM-008 (canonical ticket type taxonomy)
+#   - ticket_age_max_hours: int                             # ticket creation freshness (single value)
+#   - ticket_age_max_hours_by_type: map[str, int]           # Wave B — PIM-009 (per-type freshness from Zafin Table 3)
+#   - requester_assignee_match: bool                        # legacy assignee-only check
+#   - requester_linked_to_ticket: { kinds: list[str] }      # Wave B — PIM-013 (reporter|assignee|watcher|team-member)
 #   - group_membership_any: list[str]                       # group object IDs
 #   - role_in_allowlist: list[str]                          # role display names or definition IDs
 #   - role_in_high_risk_catalog: list[str]                  # Wave A — Zafin Table 4
@@ -30,21 +35,92 @@
 #   - activation_duration_max_hours: int
 #   - recent_activations_max: { window_hours: int, count: int }
 #
+# Wave B testbed scope: validates the WIRING (jira_get_issue calls, status reads,
+# type checks, age math) against the existing aq-r2d2.atlassian.net SCRUM project.
+# Production-environment gaps (real ticket type taxonomy, SSO-bridged identity
+# mapping, multi-project key prefixes) are deferred and documented in
+# WAVE-B-LIMITATIONS.md.
+#
 # PLACEHOLDER values remain where Zafin must supply real allowlists (Wave C).
 
-version: 2
+version: 3
 rules:
-  - id: R001-ticket-exists
-    description: Linked Jira ticket must exist and be readable.
+  # ============================================================================
+  # Ticket validation chain (Wave B — PIM-005 through PIM-013)
+  # Each predicate runs independently. Earlier failures do NOT short-circuit
+  # later checks; the agent reports every FAIL so the audit ticket carries the
+  # full diagnostic.
+  # ============================================================================
+
+  - id: R001-ticket-id-format
+    description: |
+      Wave B / PIM-005. The ticketInfo.ticketNumber on the PIM request must
+      look like a Jira issue key (PROJECT-NUMBER, e.g. SCRUM-42). This is a
+      pure format check — no Jira call. Fails fast on free-text tickets like
+      "TESTBED-SCHED-D" so downstream Jira predicates short-circuit cleanly.
     kind: hard
-    terminal: false                              # Wave A — no longer terminal; each ticket predicate runs independently in Wave B.
-    decision_on_fail: Reject                     # Zafin PIM-006: missing/unresolvable ticket -> Reject with Remarks.
+    terminal: false
+    decision_on_fail: Reject                     # Zafin PIM-005: malformed/missing ticket id -> Reject.
     predicate:
-      type: ticket_state_in
-      values: ["Open", "In Progress", "In Review", "Investigating"]
+      type: ticket_id_format_match
+      pattern: "^[A-Z][A-Z0-9_]+-[1-9][0-9]*$"
+
+  - id: R001b-ticket-exists
+    description: |
+      Wave B / PIM-006. The Jira ticket whose key was supplied in the PIM
+      request must exist and be readable by the agent's Jira credential.
+      Implementation: agent calls jira_get_issue(ticketId); 404 / 401 / 403 ->
+      FAIL.
+    kind: hard
+    terminal: false
+    decision_on_fail: Reject                     # Zafin PIM-006: ticket not found -> Reject.
+    predicate:
+      type: ticket_exists
+      value: true
+
+  - id: R001c-ticket-status-active
+    description: |
+      Wave B / PIM-007. Ticket must be in an actionable status. Closed or
+      otherwise terminal statuses indicate the work is finished and the role
+      activation is no longer justified. Block-list (not whitelist) so future
+      custom workflows don't silently FAIL on unknown active states.
+    kind: hard
+    terminal: false
+    decision_on_fail: Reject                     # Zafin PIM-007: closed ticket -> Reject.
+    predicate:
+      type: ticket_state_not_in
+      values: ["Done", "Closed", "Cancelled", "Rejected", "Duplicate", "Resolved", "Won't Do"]
+
+  - id: R001d-ticket-type-valid
+    description: |
+      Wave B / PIM-008. Ticket type must indicate operational work that could
+      reasonably justify a privileged role activation. Non-operational types
+      (e.g. "Epic", "Sub-task", "Story" used for backlog grooming) route to
+      Human Review rather than Reject — sometimes the ticket is correct but
+      mistyped.
+    kind: hard
+    terminal: false
+    decision_on_fail: HumanReview                # Zafin PIM-008: unusual ticket type -> Human Review (may still be valid work).
+    predicate:
+      type: ticket_type_in
+      # Aspirational Zafin-canonical types. The aq-r2d2 testbed uses the
+      # default SCRUM types (Story / Task / Bug / Epic / Subtask) — see
+      # WAVE-B-LIMITATIONS.md for the testbed mapping. The agent applies the
+      # mapping at evaluation time so this allowlist stays Zafin-canonical.
+      values:
+        - "Incident"
+        - "Change Request"
+        - "Service Request"
+        - "Deployment"
+        - "Problem"
+        - "Security Exception"
 
   - id: R002-ticket-recent
-    description: Linked ticket must be opened within the last 72 hours.
+    description: |
+      Wave B / PIM-009. Ticket must be recent enough that the work it describes
+      could plausibly still be in flight. Defaults to 72h. Wave C will replace
+      this with the per-ticket-type table from Zafin section 7 (Incident: 24h,
+      Change: 168h, etc.) via ticket_age_max_hours_by_type.
     kind: hard
     terminal: false
     decision_on_fail: HumanReview                # Zafin PIM-009: stale tickets -> Human Review (may still represent valid work).
@@ -52,14 +128,20 @@ rules:
       type: ticket_age_max_hours
       value: 72
 
-  - id: R003-requester-assignee
-    description: Requester must be the assignee of the linked ticket.
+  - id: R003-requester-linked-to-ticket
+    description: |
+      Wave B / PIM-013. The PIM requester (Entra principal) must be related
+      to the Jira ticket as reporter, assignee, or watcher. The agent uses
+      the identity-mapping table in agent/identity-map.yaml to translate the
+      Entra UPN into an Atlassian accountId before comparing. Production
+      environments will replace this with SSO-bridged identity lookups (see
+      WAVE-B-LIMITATIONS.md, caveat 2).
     kind: hard
     terminal: false
-    decision_on_fail: Reject                     # Zafin PIM-013: no requester<->ticket relationship -> Reject.
+    decision_on_fail: HumanReview                # Wave B — relaxed from Reject to HumanReview because identity-mapping table is intentionally fragile in the testbed.
     predicate:
-      type: requester_assignee_match
-      value: true
+      type: requester_linked_to_ticket
+      kinds: ["reporter", "assignee", "watcher"]
 
   - id: R004-group-membership
     description: Requester must belong to one of the approved on-call groups.

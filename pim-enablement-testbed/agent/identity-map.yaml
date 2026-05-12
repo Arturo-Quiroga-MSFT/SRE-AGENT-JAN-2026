@@ -1,0 +1,39 @@
+# Wave B — Identity Mapping (Entra UPN → Atlassian accountId)
+#
+# This file is the testbed-only stand-in for the SSO bridge that production
+# environments use to relate a PIM requester (Entra principal) to a Jira user.
+# The R003-requester-linked-to-ticket predicate uses this map at evaluation
+# time. See WAVE-B-LIMITATIONS.md (caveat 2) for production guidance.
+#
+# Format:
+#   <entra-upn>:
+#     account_id: <atlassian-account-id>      # from /rest/api/3/myself
+#     display_name: <free-text>
+#     notes: <free-text>
+#
+# To find your Atlassian account_id:
+#   curl -s -u 'arturoqu@microsoft.com:YOUR_API_TOKEN' \
+#     https://aq-r2d2.atlassian.net/rest/api/3/myself | jq -r .accountId
+# (API token from https://id.atlassian.com/manage-profile/security/api-tokens)
+#
+# Coverage: only test-tenant principals that get used in PIM activations.
+# All other lookups should fall through to predicate FAIL (decision_on_fail:
+# HumanReview), which is the safe default.
+
+version: 1
+mappings:
+  pim-requester@MngEnvMCAP094150.onmicrosoft.com:
+    account_id: "712020:1f90fe72-768e-4951-8f82-823888882b3d"
+    display_name: "PIM Test Requester"
+    notes: |
+      Test-tenant principal used by trigger-pim-activation.ps1. Map points to
+      Arturo's personal aq-r2d2 Atlassian account (Atlassian login:
+      arturoqu@microsoft.com) because the test Entra tenant has no SSO bridge
+      to Atlassian Cloud. Production: replace with SSO-bridged account_id
+      resolved at agent startup via Atlassian /myself + Entra ID /me
+      cross-reference.
+
+  admin@MngEnvMCAP094150.onmicrosoft.com:
+    account_id: "712020:1f90fe72-768e-4951-8f82-823888882b3d"
+    display_name: "MngEnvMCAP094150 Admin"
+    notes: Test-tenant tenant admin. Same caveat as above.
