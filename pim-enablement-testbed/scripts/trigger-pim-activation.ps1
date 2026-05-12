@@ -129,7 +129,16 @@ if ($RoleDisplayName) {
     if (-not $picked) { throw "No eligible role named '$name' found." }
 }
 
-Write-Host "`nActivating: $($picked.RoleDefinition.DisplayName)  scope=$($picked.DirectoryScopeId)" -ForegroundColor Cyan
+# Some Graph SDK versions return $picked.DirectoryScopeId empty even though
+# the eligibility instance has a scope. Fall back to "/" (tenant root) which
+# is the only scope used in the testbed for Entra-role eligibilities.
+$scopeId = $picked.DirectoryScopeId
+if ([string]::IsNullOrWhiteSpace($scopeId)) {
+    Write-Host "  (DirectoryScopeId was empty on the eligibility instance; defaulting to '/')" -ForegroundColor DarkYellow
+    $scopeId = '/'
+}
+
+Write-Host "`nActivating: $($picked.RoleDefinition.DisplayName)  scope=$scopeId" -ForegroundColor Cyan
 
 # --- 5. Submit selfActivate request ------------------------------------------
 
@@ -137,7 +146,7 @@ $body = @{
     action           = 'selfActivate'
     principalId      = $me.Id
     roleDefinitionId = $picked.RoleDefinitionId
-    directoryScopeId = $picked.DirectoryScopeId
+    directoryScopeId = $scopeId
     justification    = $Justification
     ticketInfo       = @{
         ticketNumber = $TicketNumber
