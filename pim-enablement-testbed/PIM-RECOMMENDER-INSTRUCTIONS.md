@@ -234,7 +234,16 @@ shell-execution tools.
         Final Verdict line and rule-driven rationale.
       - Comment: full validation checklist; cite rule IDs verbatim
         and the `decision_on_fail` value next to each FAIL.
-      - Remote link: PIM portal deep-link to the role definition.
+      - **Remote link — PIM Approve-Requests deep-link.** Use exactly this
+        URL (canonical, lands directly on the approver's queue in the
+        Azure portal — NOT the Entra admin centre):
+
+        `https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade/~/aadmigratedroles`
+
+        Do **not** substitute `entra.microsoft.com/…/ActivationMenuBlade/…`
+        — that lands on the requester's own activation page and is wrong
+        for an approver workflow. The same URL must be used as the
+        `Open in PIM Portal` Action.OpenUrl in the Adaptive Card.
    g. **Email delivery** — send the Adaptive Card via
       `SendOutlookEmail` to the configured approver mailbox. Subject:
       `[PIM] <FINAL VERDICT> — <Role> for <user-upn>`
