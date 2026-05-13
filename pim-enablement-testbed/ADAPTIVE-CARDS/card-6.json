@@ -1,0 +1,86 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "size": "Large",
+      "weight": "Bolder",
+      "text": "PIM Activation — Recommendation"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        {"title": "Request ID", "value": "d407dd65-3e81-44b9-a7d6-c9fe86062051"},
+        {"title": "Requester", "value": "PIM Test Requester (pim-requester@MngEnvMCAP094150.onmicrosoft.com)"},
+        {"title": "Role", "value": "Reader"},
+        {"title": "Scope", "value": "/subscriptions/7a28b21e-…/resourceGroups/rg-pim-testbed"},
+        {"title": "Duration", "value": "PT1H"},
+        {"title": "Ticket", "value": "SCRUM-34 (To Do / Task)"},
+        {"title": "Justification", "value": "Wave C F8 - real ARM PIM Approve path with 0.10.0 arm_* tools live (SCRUM-34)"},
+        {"title": "Source", "value": "wave-c-f8-approve-path-arm-tools"}
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Validation Checklist",
+      "weight": "Bolder",
+      "spacing": "Medium"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        {"title": "R001", "value": "✅ ticket_id_format_match — PASS"},
+        {"title": "R001b", "value": "✅ ticket_exists — PASS"},
+        {"title": "R001c", "value": "✅ ticket_state_not_in — PASS"},
+        {"title": "R001d", "value": "✅ ticket_type_in — PASS"},
+        {"title": "R002", "value": "✅ ticket_age_max_hours — PASS"},
+        {"title": "R003", "value": "✅ requester_linked_to_ticket — PASS"},
+        {"title": "R004", "value": "✅ group_membership_any — PASS"},
+        {"title": "R005", "value": "✅ role_in_allowlist — PASS"},
+        {"title": "R005b", "value": "✅ role_in_high_risk_catalog — PASS"},
+        {"title": "R006", "value": "✅ scope_prefix_in_allowlist — PASS"},
+        {"title": "R006b", "value": "✅ scope_is_tenant_root — PASS"},
+        {"title": "R006c", "value": "✅ scope_is_management_group — PASS"},
+        {"title": "R007", "value": "✅ activation_duration_max_hours — PASS"},
+        {"title": "R008", "value": "✅ recent_activations_max — PASS"}
+      ]
+    },
+    {
+      "type": "Container",
+      "style": "good",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "FINAL VERDICT: Approve",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Good"
+        },
+        {
+          "type": "TextBlock",
+          "text": "All 14 rules passed (R001, R001b, R001c, R001d, R002, R003, R004, R005, R005b, R006, R006b, R006c, R007, R008). Confidence: High.",
+          "wrap": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open in PIM Portal",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade/~/aadmigratedroles"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Source Ticket (SCRUM-34)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-34"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Audit Ticket (SCRUM-38)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-38"
+    }
+  ]
+}
