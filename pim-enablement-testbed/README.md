@@ -1,8 +1,8 @@
 # PIM Enablement Testbed
 
 > Azure SRE Agent — PIM Enablement use case for Zafin
-> Status: **E2E partially validated (May 7, 2026)** · Layer 1 (gap-filler) and Layer 2 (Graph plumbing) green; Layer 3 (Azure SRE Agent wiring) in progress
-> Architecture: **Hybrid — Enterprise MCP + thin custom MCP for one endpoint**
+> Status: **E2E validated for Entra-PIM (May 8, 2026); ARM-PIM tools shipped (May 13, 2026)** · Layer 1 / 2 / 3 green; Wave C (ARM-PIM) live in pim-mcp 0.10.0
+> Architecture: **Hybrid — Enterprise MCP + custom pim-mcp covering both PIM systems (Graph + ARM)**
 > Target: mid-June 2026 internal demo · end-of-June customer-facing demo
 
 This testbed implements the **PIM Enablement** use case agreed with Zafin
@@ -51,14 +51,14 @@ and the standalone deck
 
 ---
 
-## Current state — May 8, 2026
+## Current state — May 13, 2026
 
 | Layer | What it covers | Status |
 |---|---|---|
-| **Layer 1 — gap-filler infra** | `pim-mcp` **0.8.0** deployed to Container Apps (Streamable-HTTP at `/mcp`); MI bound to Graph with `RoleAssignmentSchedule.Read.Directory` + `User.Read.All` + `RoleManagement.Read.Directory` + `PrivilegedAccess.Read.AzureAD`; **9 tools** (`list_pending_pim_requests`, `list_pim_request_history`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_role_definition`, `health`); IMDS `bypass_cache=true` token path so newly-granted appRoles take effect immediately; smoke test green | ✅ |
+| **Layer 1 — gap-filler infra** | `pim-mcp` **0.10.0** deployed to Container Apps `ca-pimtest-pimmcp` (Streamable-HTTP at `/mcp`); MI bound to Graph with `RoleAssignmentSchedule.Read.Directory` + `User.Read.All` + `RoleManagement.Read.Directory` + `PrivilegedAccess.Read.AzureAD` + `GroupMember.Read.All` and to ARM with `Reader` on `rg-pim-testbed`; **13 tools** — 10 Graph (`list_pending_pim_requests`, `list_pim_request_history`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_user_group_memberships`, `get_role_definition`, `health`) plus **3 ARM** added in 0.10.0 (`arm_get_request_status`, `arm_get_request_approver`, `arm_get_role_definition`); IMDS `bypass_cache=true` token path; per-resource token cache (`https://graph.microsoft.com/.default` + `https://management.azure.com/.default`); smoke test green via `scripts/smoke-test-arm-tools.py` | ✅ |
 | **Layer 2 — Graph plumbing** | Test users created (`pim-requester`, `pim-approver`); eligibility assigned (`Provisioned`); approval policy patched (`isApprovalRequired=true`); requester self-activation lands `PendingApproval` | ✅ |
 | **Layer 1 ↔ 2 chain** | `list_pending_pim_requests` returns the live PendingApproval request with matching GUID, justification, ticket info | ✅ |
-| **Layer 3 — Azure SRE Agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, **9 tools** selected); confirmed alongside grafana-mcp + jira-mcp | ✅ |
+| **Layer 3 — Azure SRE Agent wiring** | `PIM-MCP` connector wired into SRE Agent `aq-main` (Streamable-HTTP, Bearer placeholder, **13 tools** selected after 0.10.0 refresh); confirmed alongside grafana-mcp + jira-mcp | ✅ |
 | **Layer 4 — agent reasoning** | Prompts 5a (find pending) + 5b (resolve IDs) + 6 (policy/risk reasoning) + 8 (approver-pastable triage) all pass; agent grounds answers in repo (validation-rules.yaml, configure-pim-approval.ps1) | ✅ |
 | **Layer 5 — latency loop** | 10-trial round-trip over `list_pending_pim_requests` (2026-05-08): cold-start trial = **10,484 ms**, warm **p50 = 4,247 ms**, warm **p95 = 6,251 ms**, all-trial **p95 = 10,484 ms**. Warm path acceptable for demo; cold-start above 5 s threshold — mitigation is `min-replicas=1` (currently 0). | ✅* |
 | **Step 7 — full approver flow** | Approver-side approve in PIM portal → status flip → agent re-check returns empty (Step 7); disposition tools `get_request_status` + `list_active_role_assignments` (Step 7b); approver-identity audit trail via `get_request_approver` (Step 7c). All PASS 2026-05-08. | ✅ |
@@ -75,6 +75,13 @@ and the standalone deck
 2. **80-tool agent-wide cap.** Every connector contributes to a single per-agent budget. Trim grafana-mcp / jira-mcp tool selections to free slots before adding new connectors.
 3. **Microsoft Enterprise MCP can't be wired today.** The wizard offers only Bearer / Custom headers / Managed identity. Enterprise MCP is delegated-OAuth-only by design. Tactical workaround: extend `pim-mcp` with the Graph reads you'd otherwise call via Enterprise MCP (we added `get_user` + `get_role_definition`). Strategic ask: PM team to add OAuth 2.0 Authorization Code (delegated) to the wizard.
 4. **`isPrivileged` is beta-only.** Stay v1.0-compatible in `$select` strings or Graph returns 400.
+
+### Day 3 (May 13) roadblock removers — PIM-on-Azure-Resources
+
+5. **Two PIM systems, not one.** PIM for **Entra roles** lives under Microsoft Graph (`/roleManagement/directory/...`). PIM for **Azure resources** (subscription / RG / resource scopes) lives under **ARM** (`Microsoft.Authorization/roleAssignmentScheduleRequests`, api-version `2020-10-01`) and is **unreachable** from Graph or Enterprise MCP. The agent must route by scope prefix — see `agent/knowledge.md` §3b. `pim-mcp 0.10.0` adds the three `arm_*` tools that close this gap.
+6. **Approver discovery on ARM scopes is a 3-hop walk.** ARM does not return the policy inline on the request. `arm_get_request_approver` does: GET request → roleDefinitionId → LIST `roleManagementPolicyAssignments?$filter=atScope() and roleDefinitionId eq '<id>'` → GET `policyId` → read `Approval_EndUser_Assignment` rule. The MI needs `Reader` on the scope; that single role covers both `roleAssignmentScheduleRequests/read` and `roleManagementPolicyAssignments/read`.
+7. **Duration parsing belongs server-side.** ARM returns ISO 8601 (`PT1H`, `PT30M`). Doing the regex in the agent prompt is brittle; `arm_get_request_status` parses it into `durationHours: int` so validation rule R007 reads a clean number. Same payload also exposes `durationHours` directly on the trigger as a fallback (see `agent/knowledge.md` §3a).
+8. **Foundry caches the connector's tool list.** After deploying a new pim-mcp version with new tools, the SRE Agent UI must be told to refresh the connector or the new tools never appear in the toolbox. `scripts/redeploy-pim-mcp.sh` prints the reminder.
 
 ---
 
@@ -262,7 +269,12 @@ pim-enablement-testbed/
 │   ├── assign-pim-eligibility.ps1  # Step 2 — assign requester as PIM-eligible
 │   ├── configure-pim-approval.ps1  # Step 3 — require approval on activation policy (Beta cmdlets)
 │   ├── trigger-pim-activation.ps1  # Step 4 — requester submits self-activation (device code)
+│   ├── redeploy-pim-mcp.sh         # NEW — one-shot build/push/roll for pim-mcp; auto-grants ARM Reader
 │   ├── smoke-test-pim-mcp.py       # Layer-1 smoke test: SSE → list_pending_pim_requests
+│   ├── smoke-test-new-tools.py     # Smoke test for 0.5.0 disposition tools
+│   ├── smoke-test-arm-tools.py     # NEW — smoke test for the three 0.10.0 arm_* tools
+│   ├── smoke-test-approver.py      # Smoke test for get_request_approver (beta endpoint)
+│   ├── fire-sre-agent-trigger.sh   # Fire the SRE Agent HTTP trigger (durationHours payload)
 │   ├── test-enterprise-mcp.py      # Enterprise-MCP reachability probe
 │   ├── trigger-pim-request.sh      # Synthetic activation request for demo
 │   └── verify-deployment.sh        # End-to-end smoke test

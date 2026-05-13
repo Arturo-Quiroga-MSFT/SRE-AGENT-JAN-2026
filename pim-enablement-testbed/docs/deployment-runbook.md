@@ -21,7 +21,7 @@ export PREFIX="pimtest"
 export TENANT_ID="<your-test-tenant-id>"
 export SVC_ACCOUNT_UPN="svc-pim-enablement-agent@<tenant>"
 export ACR_NAME="<your-acr>"                  # for the gap-filler pim-mcp image
-export PIM_MCP_IMAGE="$ACR_NAME.azurecr.io/pim-mcp:0.6.1"
+export PIM_MCP_IMAGE="$ACR_NAME.azurecr.io/pim-mcp:0.10.0"
 ```
 
 ## 1. Provision the Microsoft MCP Server for Enterprise (one-time per tenant)
@@ -43,10 +43,18 @@ pwsh ./scripts/provision-enterprise-mcp.ps1 `
 
 ## 2. Provision Azure infra
 
-First, build and push the gap-filler `pim-mcp` image:
+First, build and push the gap-filler `pim-mcp` image. For first-time
+bootstrap use `az acr build` directly; for subsequent rolls of an
+existing `ca-pimtest-pimmcp` Container App, prefer the one-shot
+`scripts/redeploy-pim-mcp.sh` (handles build + ACA roll + revision
+restart + ARM `Reader` grant for the 0.10.0 `arm_*` tools \u2014 idempotent).
 
 ```bash
-az acr build -r "$ACR_NAME" -t "pim-mcp:0.6.1" mcp-servers/pim-mcp
+# First-time bootstrap (no ACA yet):
+az acr build -r "$ACR_NAME" -t "pim-mcp:0.10.0" mcp-servers/pim-mcp
+
+# Subsequent rolls (existing ACA):
+ACR_NAME="$ACR_NAME" ./scripts/redeploy-pim-mcp.sh
 ```
 
 Then deploy:

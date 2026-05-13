@@ -1,0 +1,97 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "Container",
+      "style": "attention",
+      "bleed": true,
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "PIM Activation — Reject with Remarks",
+          "weight": "Bolder",
+          "size": "Large",
+          "color": "Attention"
+        },
+        {
+          "type": "TextBlock",
+          "text": "Request d407dd65-3e81-44b9-a7d6-c9fe86062051",
+          "isSubtle": true,
+          "spacing": "None"
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        {"title": "Requester", "value": "PIM Test Requester (pim-requester@MngEnvMCAP094150.onmicrosoft.com)"},
+        {"title": "Role", "value": "Reader"},
+        {"title": "Scope", "value": "/subscriptions/7a28b21e-.../resourceGroups/rg-pim-testbed"},
+        {"title": "Duration", "value": "PT1H"},
+        {"title": "Ticket", "value": "SCRUM-34 (To Do)"},
+        {"title": "Justification", "value": "Wave B F6 - Approve-path re-fire after pushing YAML/knowledge edits + R007 payload fallback"},
+        {"title": "Source", "value": "manual-azure-pim-real-activation-approve-path-rerun"},
+        {"title": "Evaluated At", "value": "2026-05-13T16:00:00Z"}
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Validation Checklist",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        {"title": "R001", "value": "✓ PASS — Ticket ID format valid"},
+        {"title": "R001b", "value": "✓ PASS — Ticket exists in Jira"},
+        {"title": "R001c", "value": "✓ PASS — Ticket status active (To Do)"},
+        {"title": "R001d", "value": "✓ PASS — Ticket type valid (Task → Service Request)"},
+        {"title": "R002", "value": "✓ PASS — Ticket recent (~1h < 72h)"},
+        {"title": "R003", "value": "✓ PASS — Requester linked to ticket (reporter)"},
+        {"title": "R004", "value": "✓ PASS — Group membership verified"},
+        {"title": "R005", "value": "✓ PASS — Role in allowlist (Reader)"},
+        {"title": "R005b", "value": "✓ PASS — Not in high-risk catalog"},
+        {"title": "R006", "value": "✗ FAIL — Scope not in allowlist (⚠ PLACEHOLDER values)"},
+        {"title": "R006b", "value": "✓ PASS — Not tenant-root scope"},
+        {"title": "R006c", "value": "✓ PASS — Not management-group scope"},
+        {"title": "R007", "value": "✓ PASS — Duration within cap (PT1H ≤ PT8H)"},
+        {"title": "R008", "value": "✓ PASS — Activation frequency OK (0 ≤ 3 in 24h)"}
+      ]
+    },
+    {
+      "type": "Container",
+      "style": "attention",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "FINAL VERDICT: Reject with Remarks",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Attention"
+        },
+        {
+          "type": "TextBlock",
+          "text": "R006 scope-allowlist FAIL: Scope does not match any allowed prefix. Allowlist contains PLACEHOLDER values (unratified — Zafin D1). If scope is known-good, override with manual approval.",
+          "wrap": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open in PIM Portal",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ActivationMenuBlade/~/aadmigratedroles"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Ticket (SCRUM-34)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-34"
+    }
+  ]
+}
+

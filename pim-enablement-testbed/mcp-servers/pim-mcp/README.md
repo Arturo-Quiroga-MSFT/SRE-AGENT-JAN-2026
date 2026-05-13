@@ -1,10 +1,17 @@
-# PIM MCP Server — read-only Graph proxy (ACTIVE)
+# PIM MCP Server — read-only PIM proxy (ACTIVE)
 
-> **Status: ACTIVE as of May 8, 2026.** Image **0.9.0**. Streamable-HTTP at `/mcp`.
-> Ten tools: `list_pending_pim_requests`, `list_pim_request_history`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_user_group_memberships`, `get_role_definition`, `health`.
-> Uses **app-only** Graph auth via Managed Identity. One tool (`get_request_approver`) hits the Graph **beta** endpoint; the other eight are v1.0.
+> **Status: ACTIVE as of May 13, 2026.** Image **0.10.0**. Streamable-HTTP at `/mcp`.
+> **Thirteen tools** spanning two PIM systems:
+> - **PIM for Microsoft Entra roles** (Microsoft Graph, app-only via MI):
+>   `list_pending_pim_requests`, `list_pim_request_history`, `get_request_status`, `get_request_approver`, `list_active_role_assignments`, `list_eligible_role_assignments`, `get_user`, `get_user_group_memberships`, `get_role_definition`, `health`.
+> - **PIM for Azure Resources** (Azure ARM, MI token for `https://management.azure.com/.default`) — **NEW in 0.10.0 (Wave C)**:
+>   `arm_get_request_status`, `arm_get_request_approver`, `arm_get_role_definition`.
 >
-> **Scope expanded May 8, 2026** beyond the original 1-tool gap-filler. The SRE Agent's MCP connector wizard does not yet support delegated-OAuth, which blocks wiring Microsoft's Enterprise MCP server. We extended this server with a minimal user/role-resolver surface plus request-disposition, active-assignment, and approver-audit lookups as a tactical workaround. Track the strategic fix (OAuth in the wizard) and contract this server back to its original 1-tool gap-filler scope when Enterprise MCP becomes wireable.
+> The agent routes by **scope**: scopes starting with `/subscriptions/...` or `/providers/Microsoft.Management/managementGroups/...` go to the `arm_*` tools; tenant scopes (`/`, `/administrativeUnits/...`) go to the Graph tools. See `agent/knowledge.md` §3b.
+>
+> **Scope expanded** beyond the original 1-tool gap-filler in three waves:
+> - **0.7.0–0.9.0** added Graph user/role-resolver + history + group-membership tools (closed validation rules R004 / R008) as a workaround for the SRE Agent MCP connector wizard not yet supporting delegated-OAuth (which blocks Enterprise MCP).
+> - **0.10.0 (Wave C)** added the three ARM tools above to close the disposition + approver gap for **PIM-on-Azure-Resources** requests, which Enterprise MCP cannot reach at all (it only proxies Graph).
 
 ## Why this exists
 
@@ -64,9 +71,14 @@ This server uses a Managed Identity (app-only) to read pending requests.
 | `get_user(principal_id)` | Resolve an Entra ID object ID to displayName, UPN, mail, jobTitle, department, accountEnabled. |
 | `get_user_group_memberships(principal_id, top=100)` | List a user's transitive group memberships from `/users/{id}/transitiveMemberOf`. **Added 0.9.0** to close validation rule **R004** (group-membership gating, previously stuck on REVIEW MANUALLY). Filters Graph response to `#microsoft.graph.group` rows only. |
 | `get_role_definition(role_definition_id)` | Resolve a directory role definition GUID to displayName, description, isBuiltIn, resourceScopes. |
+| `arm_get_request_status(scope, request_id)` | **NEW 0.10.0.** Disposition for a PIM-on-Azure-Resources request (`Microsoft.Authorization/roleAssignmentScheduleRequests`, api-version `2020-10-01`). Parses `scheduleInfo.expiration.duration` (`PT<H>H` / `PT<M>M`) into `durationHours: int` so the agent does not have to. |
+| `arm_get_request_approver(scope, request_id)` | **NEW 0.10.0.** Approver-policy audit for an ARM PIM request. 3-step lookup: GET request → roleDefinitionId; LIST `roleManagementPolicyAssignments?$filter=atScope() and roleDefinitionId eq '<id>'`; GET `policyId`; pull the `Approval_EndUser_Assignment` rule's `primaryApprovers`, `approvalMode`, `stages`. |
+| `arm_get_role_definition(scope, role_definition_id)` | **NEW 0.10.0.** Resolve an ARM role-definition GUID (e.g. Reader = `acdd72a7-3385-48ef-bd42-f606fba81ae7`) to roleName, description, type, assignableScopes. api-version `2022-04-01`. |
 | `health()` | Liveness probe. |
 
-## Required Graph application permissions
+## Required permissions
+
+### Microsoft Graph application permissions
 
 Grant to the agent's User-Assigned Managed Identity:
 
@@ -87,6 +99,22 @@ pwsh ../../scripts/grant-pim-mcp-app-role.ps1 `
   -AgentMiPrincipalId <output from agent-mi.bicep>
 ```
 
+### Azure ARM RBAC (for the three `arm_*` tools — NEW 0.10.0)
+
+The MI needs **`Reader`** on every scope it will be asked about. The Reader
+built-in role grants `Microsoft.Authorization/*/read` which covers both
+`roleAssignmentScheduleRequests/read` and `roleManagementPolicyAssignments/read`.
+Granted automatically on `rg-pim-testbed` by `scripts/redeploy-pim-mcp.sh`
+(idempotent). For other scopes:
+
+```bash
+az role assignment create \
+  --assignee-object-id <mi-principal-id> \
+  --assignee-principal-type ServicePrincipal \
+  --role Reader \
+  --scope /subscriptions/<sub>/resourceGroups/<rg>
+```
+
 > **Propagation lag.** After granting an app role to a Managed Identity,
 > Graph's resource-side claim cache takes **5–60+ minutes** to honor it.
 > If the first call returns `403 PermissionScopeNotGranted`, wait and
@@ -101,15 +129,36 @@ uv sync
 AZURE_CLIENT_ID=<mi-client-id> uv run python server.py
 ```
 
-## Build & push container
+## Build, push, and roll the Container App
+
+Use the one-shot redeploy script — it discovers the ACR/ACA, reads the
+version from `pyproject.toml`, runs `az acr build` (no local Docker),
+rolls the ACA, restarts the latest revision (flushes the in-process MI
+token cache), and grants ARM `Reader` to the MI on the testbed RG so
+the new `arm_*` tools have authorization. Idempotent.
 
 ```bash
 # from repo root
-az acr build -r <acr-name> -t pim-mcp:0.6.1 mcp-servers/pim-mcp
+ACR_NAME=<acr-name> ./pim-enablement-testbed/scripts/redeploy-pim-mcp.sh
+
+# Skip flags for partial reruns:
+#   SKIP_BUILD=1   image already pushed
+#   SKIP_ROLL=1    just regrant RBAC
+#   SKIP_RBAC=1    skip the Reader grant on rg-pim-testbed
 ```
 
-Then set `pimMcpImage` parameter when running `azd up` /
-`az deployment sub create`.
+**Smoke test the new tools after a roll:**
+
+```bash
+python pim-enablement-testbed/scripts/smoke-test-arm-tools.py \
+  https://<aca-fqdn> \
+  /subscriptions/<sub>/resourceGroups/<rg> \
+  [<arm-pim-request-guid>]   # optional — omit to only probe arm_get_role_definition
+```
+
+For first-time bootstrap (no existing ACA), set the `pimMcpImage`
+parameter when running `azd up` / `az deployment sub create`, then use
+the redeploy script for subsequent versions.
 
 ## Azure SRE Agent connector wiring
 
