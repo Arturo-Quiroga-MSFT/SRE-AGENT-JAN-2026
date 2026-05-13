@@ -262,6 +262,15 @@ them** — use the equivalent `pim-mcp` tool from the table above.
    PASS if any group ID matches, FAIL (hard rule) if none match. Only
    fall back to `⚠ Cannot verify` if the tool itself errors (e.g.,
    throttled, permission revoked).
+3a. **R007 duration source — ARM-scoped requests fall back to payload.**
+   `pim-mcp.get_request_status` only sees Microsoft Graph
+   (`/roleManagement/directory/...`); Azure-resource PIM requests live on
+   ARM (`/subscriptions/.../providers/Microsoft.Authorization/roleAssignmentScheduleRequests/...`)
+   and will 404. When this happens, read `durationHours` directly from
+   the trigger payload and evaluate R007 against
+   `activation_duration_max_hours` (8). PASS if `durationHours <= 8`,
+   FAIL if greater. Only emit `⚠ Cannot verify` for R007 when **both**
+   the Graph lookup 404s **and** the payload omits `durationHours`.
 4. **Always** emit the Adaptive Card payload AND append the Jira audit
    comment, even when the verdict is `REVIEW MANUALLY`. Audit
    completeness > brevity. (Until the Teams webhook is wired, the card

@@ -35,6 +35,10 @@ TICKET_NUMBER="${TICKET_NUMBER:-SCRUM-26}"
 TICKET_SYSTEM="${TICKET_SYSTEM:-Jira}"
 JUSTIFICATION="${JUSTIFICATION:-Wave B smoke F2 RE-RUN - validate v3 schema loaded (R001/R001b/R001c FAIL + R001d HumanReview + R003 v3 identity-map)}"
 SOURCE="${SOURCE:-manual-curl-wave-b-f2-rerun}"
+# durationHours: agent uses this as the R007 input when get_request_status
+# returns 404 (ARM-scoped PIM requests aren't visible on the Graph endpoint).
+# Must match what azure-pim-activate.sh actually submitted.
+DURATION_HOURS="${DURATION_HOURS:-1}"
 
 # ---- Build payload ----------------------------------------------------------
 if [[ "${1:-}" != "" && -f "${1}" ]]; then
@@ -54,7 +58,8 @@ else
   "ticketNumber": "${TICKET_NUMBER}",
   "ticketSystem": "${TICKET_SYSTEM}",
   "justification": "${JUSTIFICATION}",
-  "source": "${SOURCE}"
+  "source": "${SOURCE}",
+  "durationHours": ${DURATION_HOURS}
 }
 JSON
 )
