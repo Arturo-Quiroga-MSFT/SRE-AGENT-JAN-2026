@@ -1,0 +1,110 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "Container",
+      "style": "warning",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "⚠ HUMAN REVIEW NEEDED",
+          "weight": "Bolder",
+          "size": "Large",
+          "color": "Warning"
+        },
+        {
+          "type": "TextBlock",
+          "text": "PIM Activation Request — Privileged Role Administrator",
+          "weight": "Bolder",
+          "size": "Medium"
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "Request ID", "value": "502e2ccc-8f6d-4f95-8912-e7c6b2b62fd8" },
+        { "title": "Requester", "value": "PIM Test Requester (pim-requester@MngEnvMCAP094150.onmicrosoft.com)" },
+        { "title": "Role", "value": "Privileged Role Administrator (built-in)" },
+        { "title": "Scope", "value": "/ (Entire directory — tenant-wide)" },
+        { "title": "Duration", "value": "PT1H" },
+        { "title": "Ticket", "value": "SCRUM-26 (Jira) — Status: Done | Type: Story" },
+        { "title": "Justification", "value": "Wave B smoke F2 re-fire #2 - confirm v3 schema + URL fix (ApproveRequestMenuBlade) both hold" },
+        { "title": "Account Enabled", "value": "true" },
+        { "title": "Active Assignments", "value": "0" },
+        { "title": "24h History", "value": "3 requests (all Denied); 0 Provisioned/Granted" },
+        { "title": "Source", "value": "manual-curl-wave-b-f2-rerun-url-fix" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Validation Checklist",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "R001-ticket-id-format", "value": "✓ PASS" },
+        { "title": "R001b-ticket-exists", "value": "✓ PASS" },
+        { "title": "R001c-ticket-status-active", "value": "✗ FAIL → Reject (Done in blocklist)" },
+        { "title": "R001d-ticket-type-valid", "value": "✗ FAIL → HumanReview (Story not canonical)" },
+        { "title": "R002-ticket-recent", "value": "✓ PASS" },
+        { "title": "R003-requester-linked-to-ticket", "value": "✓ PASS" },
+        { "title": "R004-group-membership", "value": "✓ PASS" },
+        { "title": "R005-role-allowlist", "value": "✗ FAIL → Reject (not in allowlist)" },
+        { "title": "R005b-role-high-risk", "value": "✗ FAIL → HumanReview (high-risk catalog)" },
+        { "title": "R006-scope-allowlist", "value": "✗ FAIL → Reject (PLACEHOLDER)" },
+        { "title": "R006b-scope-tenant-root", "value": "✗ FAIL → HumanReview (tenant-root)" },
+        { "title": "R006c-scope-mgmt-group", "value": "✓ PASS" },
+        { "title": "R007-duration-cap", "value": "✓ PASS" },
+        { "title": "R008-activation-frequency", "value": "✓ PASS" }
+      ]
+    },
+    {
+      "type": "Container",
+      "style": "warning",
+      "separator": true,
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "FINAL VERDICT: Human Review Needed",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Warning"
+        },
+        {
+          "type": "TextBlock",
+          "text": "R005b (high-risk role: Privileged Role Administrator), R006b (tenant-root scope /), R001d (non-canonical ticket type Story) trigger HumanReview. HumanReview trumps Reject per Zafin section 9.",
+          "wrap": true
+        },
+        {
+          "type": "TextBlock",
+          "text": "Disposition: Denied by PIM Test Approver at 2026-05-12T17:56:37Z",
+          "isSubtle": true,
+          "wrap": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open in PIM Portal",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Audit Ticket (SCRUM-33)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-33"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Source Ticket (SCRUM-26)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-26"
+    }
+  ]
+}

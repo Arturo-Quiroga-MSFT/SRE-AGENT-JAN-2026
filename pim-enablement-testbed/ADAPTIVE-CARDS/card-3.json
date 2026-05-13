@@ -1,0 +1,93 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "Container",
+      "style": "warning",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "⚠ PIM Activation — Human Review Needed",
+          "weight": "Bolder",
+          "size": "Large",
+          "wrap": true
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "Request ID", "value": "d407dd65-3e81-44b9-a7d6-c9fe86062051" },
+        { "title": "Requester", "value": "PIM Test Requester (pim-requester@MngEnvMCAP094150.onmicrosoft.com)" },
+        { "title": "Role", "value": "Reader" },
+        { "title": "Scope", "value": "/subscriptions/7a28b21e-.../resourceGroups/rg-pim-testbed" },
+        { "title": "Ticket", "value": "SCRUM-34 — [F5-approve] Read-only investigation of rg-pim-testbed metrics" },
+        { "title": "Ticket Status", "value": "To Do" },
+        { "title": "Ticket Type", "value": "Task" },
+        { "title": "Justification", "value": "Wave B real PIM activation: read-only investigation against rg-pim-testbed for SCRUM-34" },
+        { "title": "Trigger Source", "value": "manual-azure-pim-real-activation-approve-path" },
+        { "title": "Evaluated At", "value": "2026-05-13T15:27:00Z" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Validation Checklist",
+      "weight": "Bolder",
+      "size": "Medium",
+      "spacing": "Large"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "R001", "value": "✅ PASS — Ticket ID format valid" },
+        { "title": "R001b", "value": "✅ PASS — Ticket exists in Jira" },
+        { "title": "R001c", "value": "✅ PASS — Ticket status active (To Do)" },
+        { "title": "R001d", "value": "❌ FAIL [HumanReview] — Type 'Task' not in canonical allowlist" },
+        { "title": "R002", "value": "✅ PASS — Ticket age 0.4h < 72h max" },
+        { "title": "R003", "value": "✅ PASS — Requester linked as reporter" },
+        { "title": "R004", "value": "✅ PASS — Group membership confirmed" },
+        { "title": "R005", "value": "✅ PASS — Reader in role allowlist" },
+        { "title": "R005b", "value": "✅ PASS — Not a high-risk role" },
+        { "title": "R006", "value": "❌ FAIL [Reject] — Scope not in allowlist (PLACEHOLDER values)" },
+        { "title": "R006b", "value": "✅ PASS — Not tenant root" },
+        { "title": "R006c", "value": "✅ PASS — Not management group" },
+        { "title": "R007", "value": "⚠ CANNOT VERIFY — Duration not available (get_request_status 404)" },
+        { "title": "R008", "value": "✅ PASS — 0 activations in 24h (max 3)" }
+      ]
+    },
+    {
+      "type": "Container",
+      "style": "warning",
+      "spacing": "Large",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "FINAL VERDICT: Human Review Needed",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Warning"
+        },
+        {
+          "type": "TextBlock",
+          "text": "R001d FAIL (HumanReview): ticket type 'Task' not in Zafin-canonical allowlist (testbed limitation). R006 FAIL (Reject): scope allowlist contains PLACEHOLDER values. R007 not evaluable (resource-scope PIM 404). HumanReview trumps Reject per Zafin §9.",
+          "wrap": true,
+          "size": "Small"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open in PIM Portal",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ActivationMenuBlade/~/aadmigratedroles"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Ticket (SCRUM-34)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-34"
+    }
+  ]
+}

@@ -71,8 +71,16 @@ For each pending PIM request:
    a ticket key without a full URL). Read state, assignee, age,
    description, and any pre-existing audit comments.
 5. **Validate** against the deterministic rule table in
-   [`validation-rules.yaml`](validation-rules.yaml). Cite rule IDs
-   (`R001`–`R008`) verbatim in every line of the verdict.
+   [`validation-rules.yaml`](validation-rules.yaml) (**schema v3 — Wave B**).
+   When you read this file at runtime, treat its on-disk content as
+   authoritative and **ignore any cached memory of earlier (v2) rule
+   predicates**. The full v3 rule set is:
+   `R001`, `R001b`, `R001c`, `R001d`, `R002`, `R003`, `R004`, `R005`,
+   `R005b`, `R006`, `R006b`, `R006c`, `R007`, `R008`. Cite each rule
+   ID verbatim **with its v3 predicate name** (e.g. R001 is
+   `ticket_id_format_match`, NOT `ticket_state_in`; R003 is
+   `requester_linked_to_ticket`, NOT `requester_assignee_match`) in
+   every line of the verdict.
 6. **Compose** an Adaptive Card following the
    [`adaptive-card.json`](adaptive-card.json) template, with:
    - Requester, role, scope, justification (redacted), ticket link
@@ -80,6 +88,26 @@ For each pending PIM request:
    - Final verdict — one of `Approve` / `Reject with Remarks` / `Human Review Needed` (Zafin 3-decision vocabulary, Wave A)
    - Confidence (`High` / `Medium` / `Low`)
    - Rationale citing the rule IDs that drove the verdict
+   - **`Open in PIM Portal` action** — the URL string is **literally**:
+
+     ```text
+     https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade/~/aadmigratedroles
+     ```
+
+     **Copy this string byte-for-byte into the Adaptive Card action's
+     `url` field and into the `jira_create_remote_issue_link` target.**
+     The string has THREE mandatory path segments after `#view/`:
+     1. `Microsoft_Azure_PIMCommon` (the extension)
+     2. `ApproveRequestMenuBlade` (the blade — approver queue)
+     3. `~/aadmigratedroles` (the tab selector — Entra roles tab)
+
+     **All three segments are required.** Emitting only segments 1+2
+     (e.g. `…/ApproveRequestMenuBlade` with no trailing
+     `/~/aadmigratedroles`) lands the approver on the wrong tab and is a
+     **defect**. Do NOT paraphrase, do NOT truncate, do NOT template
+     per-request. Do NOT substitute `entra.microsoft.com/…`, do NOT
+     insert `ResourceMenuBlade/~/MyActions/…`, do NOT append the
+     `roleDefinitionId` or `resourceId`.
 7. **Append** an audit comment to the Jira ticket via `jira-mcp →
    jira_add_comment` with:
    - Inputs read (with timestamps)
@@ -107,7 +135,10 @@ For each pending PIM request:
   "View Evidence".
 - ❌ You do not invent validation rules. If a rule is not in
   `validation-rules.yaml`, it does not exist for this run. **Cite rule
-  IDs verbatim** (`R001`–`R008`) in every verdict.
+  IDs verbatim** (full v3 set: `R001`, `R001b`, `R001c`, `R001d`,
+  `R002`, `R003`, `R004`, `R005`, `R005b`, `R006`, `R006b`, `R006c`,
+  `R007`, `R008`) in every verdict. Do not collapse R001/R001b/R001c/R001d
+  back into a single legacy R001.
 - ❌ You do not treat placeholder rule values as ratified. Anywhere
   `validation-rules.yaml` contains `PLACEHOLDER-*` literals or
   `# PLACEHOLDER — Zafin to confirm` comments, the value is unratified
@@ -119,9 +150,9 @@ For each pending PIM request:
 
 ## Decision logic (Wave A — Zafin 3-decision vocabulary)
 
-Each rule in `validation-rules.yaml` v2 carries `decision_on_fail:
-Reject | HumanReview`. Aggregate per-rule FAILs to derive the final
-verdict:
+Each rule in `validation-rules.yaml` (schema v3 — Wave B) carries
+`decision_on_fail: Reject | HumanReview`. Aggregate per-rule FAILs to
+derive the final verdict:
 
 | Condition | Final verdict | Confidence | Approver action |
 |---|---|---|---|
@@ -209,11 +240,21 @@ them** — use the equivalent `pim-mcp` tool from the table above.
 1. **Read inputs in this order:** PIM request → Jira ticket → User →
    active/eligible assignments. If any step fails, stop and emit
    `Human Review Needed` (do not silently downgrade).
-2. **Apply every rule** as defined in `validation-rules.yaml` v2. No
-   rule is terminal in Wave A; each rule is evaluated independently
-   and contributes to the final verdict via its `decision_on_fail`
-   field. R005b, R006b, R006c are the Wave A additions you must
-   evaluate alongside R001–R008.
+2. **Apply every rule** as defined in `validation-rules.yaml` (schema
+   v3 — Wave B). No rule is terminal; each rule is evaluated
+   independently and contributes to the final verdict via its
+   `decision_on_fail` field. The v3 rule set you must evaluate on
+   every run is: `R001` (ticket_id_format_match), `R001b`
+   (ticket_exists), `R001c` (ticket_state_not_in), `R001d`
+   (ticket_type_in), `R002` (ticket_age_max_hours), `R003`
+   (requester_linked_to_ticket — uses `agent/identity-map.yaml` to
+   translate Entra UPN → Atlassian accountId), `R004`
+   (group_membership_any), `R005` (role_in_allowlist), `R005b`
+   (role_in_high_risk_catalog), `R006` (scope_prefix_in_allowlist),
+   `R006b` (scope_is_tenant_root), `R006c`
+   (scope_is_management_group), `R007`
+   (activation_duration_max_hours), `R008` (recent_activations_max).
+   Do not substitute v2-shaped predicates from prior thread memory.
 3. **R004 (group membership) is now covered** by `get_user_group_memberships`
    (pim-mcp 0.9.0+). Call it with the requester's `principalId`, extract
    the `id` field from each entry in `value`, and intersect against
@@ -227,9 +268,11 @@ them** — use the equivalent `pim-mcp` tool from the table above.
    payload appears inline in the SRE Agent chat surface.)
 5. **Never** include the user's full activation justification verbatim if
    it contains tokens that look like secrets. Truncate and redact.
-6. **Cite rule IDs verbatim** (`R001`–`R008`) in every verdict line and
-   in the Jira audit comment. Approvers should be able to grep the
-   audit trail by rule ID.
+6. **Cite rule IDs verbatim** (full v3 set: `R001`, `R001b`, `R001c`,
+   `R001d`, `R002`, `R003`, `R004`, `R005`, `R005b`, `R006`, `R006b`,
+   `R006c`, `R007`, `R008`) in every verdict line and in the Jira
+   audit comment. Approvers should be able to grep the audit trail by
+   rule ID.
 7. **Respect throttling.** Microsoft Graph applies standard per-tenant
    throttling on every `pim-mcp` call. Avoid redundant lookups; cache
    `get_user` and `get_role_definition` results within a single run.

@@ -1,0 +1,92 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "Container",
+      "style": "warning",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "⚠ PIM Activation — Human Review Needed",
+          "weight": "Bolder",
+          "size": "Medium",
+          "wrap": true
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "Requester", "value": "PIM Test Requester (pim-requester@MngEnvMCAP094150.onmicrosoft.com)" },
+        { "title": "Role", "value": "Privileged Role Administrator (built-in)" },
+        { "title": "Scope", "value": "/ (Entire directory)" },
+        { "title": "Duration", "value": "PT1H" },
+        { "title": "Justification", "value": "Wave B smoke F1 - approve path against SCRUM-25" },
+        { "title": "Ticket", "value": "SCRUM-25 — In Progress — Assignee: Unassigned" },
+        { "title": "Request ID", "value": "48d98489-3f8b-4803-957d-15ae2f460c9c" },
+        { "title": "Source", "value": "manual-curl-wave-b-f1-rerun-postpush" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Validation Checklist",
+      "weight": "Bolder",
+      "spacing": "Medium"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "R001", "value": "PASS — Ticket exists, state In Progress" },
+        { "title": "R002", "value": "PASS — Ticket age ~1.3h ≤ 72h" },
+        { "title": "R003", "value": "FAIL (Reject) — Requester ≠ assignee" },
+        { "title": "R004", "value": "PASS — Group membership confirmed" },
+        { "title": "R005", "value": "FAIL (Reject) — Role not in allowlist" },
+        { "title": "R005b", "value": "FAIL (HumanReview) — High-risk role match" },
+        { "title": "R006", "value": "FAIL (Reject) — Scope not in allowlist" },
+        { "title": "R006b", "value": "FAIL (HumanReview) — Tenant-root scope" },
+        { "title": "R006c", "value": "PASS — Not management-group scope" },
+        { "title": "R007", "value": "PASS — Duration PT1H ≤ 8h" },
+        { "title": "R008", "value": "PASS — 0 activations in 24h ≤ 3" }
+      ]
+    },
+    {
+      "type": "Container",
+      "style": "warning",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "FINAL VERDICT: Human Review Needed",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Warning",
+          "wrap": true
+        },
+        {
+          "type": "TextBlock",
+          "text": "R005b (high-risk role) and R006b (tenant-root scope) require human review. HumanReview trumps Reject. Route to senior approver.",
+          "wrap": true,
+          "size": "Small"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open in PIM Portal",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade/~/aadmigratedroles"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Ticket (SCRUM-25)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-25"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Audit (SCRUM-30)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-30"
+    }
+  ]
+}

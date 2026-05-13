@@ -114,6 +114,11 @@ rules:
         - "Deployment"
         - "Problem"
         - "Security Exception"
+        # Wave B testbed-canonical mapping (aq-r2d2 SCRUM project uses
+        # default Atlassian types). Treat as equivalent to the Zafin types
+        # noted in WAVE-B-LIMITATIONS.md, caveat 1:
+        - "Task"          # testbed mapping: Task = Service Request
+        - "Bug"           # testbed mapping: Bug  = Incident
 
   - id: R002-ticket-recent
     description: |
@@ -200,6 +205,9 @@ rules:
       values:
         - "/subscriptions/PLACEHOLDER-sub-id/resourceGroups/rg-prod-"
         - "/subscriptions/PLACEHOLDER-sub-id/resourceGroups/rg-platform-"
+        # Wave B testbed -- ARTURO-MngEnvMCAP094150 subscription, rg-pim-* RGs
+        # used by azure-pim-setup.sh for real-PIM Approve-path validation.
+        - "/subscriptions/7a28b21e-0d3e-4435-a686-d92889d4ee96/resourceGroups/rg-pim-"
 
   - id: R006b-scope-tenant-root
     description: Tenant-wide ("/") scope requires manual review per Zafin PIM-026.
