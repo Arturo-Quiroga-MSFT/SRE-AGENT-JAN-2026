@@ -266,11 +266,30 @@ them** — use the equivalent `pim-mcp` tool from the table above.
    `pim-mcp.get_request_status` only sees Microsoft Graph
    (`/roleManagement/directory/...`); Azure-resource PIM requests live on
    ARM (`/subscriptions/.../providers/Microsoft.Authorization/roleAssignmentScheduleRequests/...`)
-   and will 404. When this happens, read `durationHours` directly from
-   the trigger payload and evaluate R007 against
+   and will 404. **Preferred path (pim-mcp 0.10.0+):** call
+   `arm_get_request_status(scope, request_id)` — it returns
+   `durationHours` parsed from `scheduleInfo.expiration.duration` and
+   removes the need for any payload fallback. **Fallback path:** when
+   the ARM tool is unavailable or also errors, read `durationHours`
+   directly from the trigger payload and evaluate R007 against
    `activation_duration_max_hours` (8). PASS if `durationHours <= 8`,
-   FAIL if greater. Only emit `⚠ Cannot verify` for R007 when **both**
-   the Graph lookup 404s **and** the payload omits `durationHours`.
+   FAIL if greater. Only emit `⚠ Cannot verify` for R007 when **all**
+   sources fail.
+
+3b. **Tool routing by scope (pim-mcp 0.10.0+).** The PIM ecosystem has
+   two independent API surfaces. Always route on the request's scope:
+
+   | Scope pattern | Use these tools |
+   |---|---|
+   | `/` (tenant root), `/administrativeUnits/...`, `/roleManagement/directory` | `get_request_status`, `get_request_approver`, `get_role_definition` (Graph) |
+   | `/subscriptions/...`, `/providers/Microsoft.Management/managementGroups/...` | `arm_get_request_status`, `arm_get_request_approver`, `arm_get_role_definition` (ARM) |
+
+   The Graph tools return 404 for ARM-scoped requests; the ARM tools
+   return 404 for directory-scoped requests. Pick by scope, not by
+   trial-and-error. `get_user`, `get_user_group_memberships`,
+   `list_pending_pim_requests`, and `list_pim_request_history` are
+   directory-only and apply to both code paths (the user/group lookups
+   work regardless of where the request lives).
 4. **Always** emit the Adaptive Card payload AND append the Jira audit
    comment, even when the verdict is `REVIEW MANUALLY`. Audit
    completeness > brevity. (Until the Teams webhook is wired, the card

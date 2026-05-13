@@ -1,6 +1,8 @@
 """PIM MCP tool implementations — read-only by construction.
 
-Exposes ten tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
+Exposes thirteen tools across two API surfaces (no write tools, ever):
+
+**Graph (directory-scope PIM — Entra roles like Global Admin):**
 
 - ``list_pending_pim_requests`` — the trigger surface (PendingApproval only)
 - ``list_pim_request_history`` — historical requests filtered by status / requester /
@@ -12,27 +14,48 @@ Exposes ten tools, all GET-only against Microsoft Graph (v1.0 + one beta call):
 - ``get_user`` — resolve principalId to displayName/UPN/etc.
 - ``get_user_group_memberships`` — transitive group memberships for a principal
   (added 0.9.0; closes validation rule R004)
-- ``get_role_definition`` — resolve roleDefinitionId to displayName/etc.
+- ``get_role_definition`` — resolve directory roleDefinitionId to displayName/etc.
 - ``health`` — liveness probe
+
+**ARM (Azure-RBAC PIM — Reader/Contributor/Owner at sub/RG/resource scope, added 0.10.0):**
+
+- ``arm_get_request_status(scope, request_id)`` — ARM twin of ``get_request_status``,
+  also parses ``durationHours`` from ``scheduleInfo.expiration.duration`` so the agent
+  can evaluate R007 without payload fallback
+- ``arm_get_request_approver(scope, request_id)`` — reads the governing
+  ``roleManagementPolicyAssignment`` and returns the ``Approval_EndUser_Assignment``
+  rule's primaryApprovers / approvalMode / stages
+- ``arm_get_role_definition(scope, role_definition_id)`` — ARM twin of
+  ``get_role_definition`` for Azure RBAC roles (Reader = ``acdd72a7-...``)
+
+Routing: pick by scope. If `directoryScopeId` starts with ``/subscriptions/`` or
+``/providers/Microsoft.Management/managementGroups/``, use the ARM tools.
+Otherwise (``/``, ``/administrativeUnits/...``), use the Graph tools.
 
 All responses that include a ``directoryScopeId`` are decorated server-side with
 a human-readable ``directoryScopeLabel`` field (added 0.9.0). The label is
 derived purely from the scope string — no extra Graph call. Unrecognised
 patterns leave the label ``None``.
 
-The primary endpoint (``/v1.0/roleManagement/directory/roleAssignmentScheduleRequests``)
+Auth: app-only via Managed Identity (``DefaultAzureCredential``). Per-resource
+token cache (Graph and ARM tokens cached separately so they do not evict).
+
+The primary Graph endpoint (``/v1.0/roleManagement/directory/roleAssignmentScheduleRequests``)
 requires either:
 - delegated ``RoleAssignmentSchedule.ReadWrite.Directory`` (not available
   through Microsoft's Enterprise MCP preview), or
-- application ``RoleAssignmentSchedule.Read.Directory`` (this server uses this
-  via Managed Identity).
+- application ``RoleAssignmentSchedule.Read.Directory`` (this server uses this).
 
 ``get_request_approver`` calls the **beta** approvals endpoint
 (``/beta/roleManagement/directory/roleAssignmentApprovals/{id}/steps``); it is the
-only tool here that touches beta. It requires the ``PrivilegedAccess.Read.AzureAD``
-application permission on top of the schedule perm.
+only tool here that touches Graph beta. It requires the ``PrivilegedAccess.Read.AzureAD``
+application permission.
+
+The ARM tools require the MI to hold ``Reader`` (or stronger) on every scope it
+will be asked about. No new Graph appRoles needed.
 
 See https://learn.microsoft.com/en-us/graph/api/rbacapplication-list-roleassignmentschedulerequests
+and https://learn.microsoft.com/en-us/azure/role-based-access-control/pim-resource-roles-rest-api
 """
 
 from __future__ import annotations
@@ -52,6 +75,17 @@ log = logging.getLogger("pim-mcp.tools")
 GRAPH_BASE_URL = os.getenv("GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0")
 GRAPH_BETA_BASE_URL = os.getenv("GRAPH_BETA_BASE_URL", "https://graph.microsoft.com/beta")
 GRAPH_SCOPE = "https://graph.microsoft.com/.default"
+GRAPH_RESOURCE = "https://graph.microsoft.com"
+
+# Azure Resource Manager (Wave C 0.10.0): symmetric coverage for PIM-on-Azure-resources.
+# Graph endpoints only see directory-scope PIM (Entra roles like Global Admin).
+# ARM endpoints see Azure-RBAC PIM (Reader/Contributor/Owner at sub/RG/resource scope).
+ARM_BASE_URL = os.getenv("ARM_BASE_URL", "https://management.azure.com")
+ARM_RESOURCE = "https://management.azure.com"
+ARM_SCOPE = "https://management.azure.com/.default"
+ARM_PIM_API_VERSION = "2020-10-01"
+ARM_AUTHZ_API_VERSION = "2022-04-01"  # for roleDefinitions GET
+
 PIM_REQUESTS_PATH = "/roleManagement/directory/roleAssignmentScheduleRequests"
 PIM_INSTANCES_PATH = "/roleManagement/directory/roleAssignmentScheduleInstances"
 PIM_ELIGIBLE_INSTANCES_PATH = "/roleManagement/directory/roleEligibilityScheduleInstances"
@@ -133,7 +167,9 @@ DEFAULT_SELECT = ",".join(
 DEFAULT_EXPAND = "principal($select=id,displayName,userPrincipalName),roleDefinition($select=id,displayName)"
 
 _credential: DefaultAzureCredential | None = None
-_token_cache: dict[str, Any] = {"token": None, "exp": 0.0}
+# Per-resource token cache. Keyed by resource URL so Graph and ARM tokens
+# (different audiences) do not evict each other.
+_token_cache: dict[str, dict[str, Any]] = {}
 
 
 def _get_credential() -> DefaultAzureCredential:
@@ -143,29 +179,28 @@ def _get_credential() -> DefaultAzureCredential:
     return _credential
 
 
-async def _get_graph_token() -> str:
-    """Acquire a Graph token, preferring direct IDENTITY_ENDPOINT calls
-    with ``bypass_cache=true`` when running on Azure Container Apps.
+async def _get_token(resource: str, scope: str) -> str:
+    """Acquire an access token for ``resource`` (Graph or ARM), preferring
+    direct IDENTITY_ENDPOINT calls with ``bypass_cache=true`` on Container Apps.
 
-    The Container Apps IMDS sidecar caches tokens by (client_id, resource)
-    for the full 24h token lifetime and refuses to refresh until the
-    cached token nears expiry. This means newly-granted appRole permissions
-    do not appear in the SDK-acquired token for many hours after consent.
+    Token caches are per-resource so Graph and ARM tokens do not evict each
+    other (different audiences, different appRole grants).
 
-    We work around this by:
-      1. Hitting IDENTITY_ENDPOINT directly with ``bypass_cache=true`` to
-         force the sidecar to mint a fresh token (always reflects current
-         appRole grants).
-      2. Caching the resulting token in-process for ~50 minutes to avoid
-         calling IMDS on every Graph request.
+    Container Apps IMDS sidecar caches tokens by (client_id, resource) for
+    the full 24h lifetime and refuses to refresh until near expiry. This
+    breaks newly-granted appRole permissions. We bypass that cache by:
+      1. Hitting IDENTITY_ENDPOINT with ``bypass_cache=true`` to force a
+         fresh token reflecting current appRole grants.
+      2. Caching in-process for ~50 minutes to avoid IMDS on every call.
       3. Falling back to ``DefaultAzureCredential`` for local dev where
          IDENTITY_ENDPOINT is not set.
     """
     import time
 
     now = time.time()
-    if _token_cache["token"] and _token_cache["exp"] - now > 60:
-        return _token_cache["token"]
+    cached = _token_cache.get(resource)
+    if cached and cached["exp"] - now > 60:
+        return cached["token"]
 
     identity_endpoint = os.getenv("IDENTITY_ENDPOINT")
     identity_header = os.getenv("IDENTITY_HEADER")
@@ -174,7 +209,7 @@ async def _get_graph_token() -> str:
     if identity_endpoint and identity_header and client_id:
         params = {
             "api-version": "2019-08-01",
-            "resource": "https://graph.microsoft.com",
+            "resource": resource,
             "client_id": client_id,
             "bypass_cache": "true",
         }
@@ -187,16 +222,23 @@ async def _get_graph_token() -> str:
             resp.raise_for_status()
             data = resp.json()
             token = data["access_token"]
-            # expires_on is a unix timestamp string on Container Apps IMDS
             exp = float(data.get("expires_on") or now + 3000)
-            _token_cache["token"] = token
-            _token_cache["exp"] = exp
+            _token_cache[resource] = {"token": token, "exp": exp}
             return token
 
-    token = _get_credential().get_token(GRAPH_SCOPE).token
-    _token_cache["token"] = token
-    _token_cache["exp"] = now + 3000
+    token = _get_credential().get_token(scope).token
+    _token_cache[resource] = {"token": token, "exp": now + 3000}
     return token
+
+
+async def _get_graph_token() -> str:
+    """Back-compat wrapper for the original Graph-only helper."""
+    return await _get_token(GRAPH_RESOURCE, GRAPH_SCOPE)
+
+
+async def _get_arm_token() -> str:
+    """Acquire an Azure Resource Manager token (Wave C ARM tools)."""
+    return await _get_token(ARM_RESOURCE, ARM_SCOPE)
 
 
 async def _graph_get(path: str, params: dict[str, str] | None = None, *, beta: bool = False) -> dict[str, Any]:
@@ -226,6 +268,55 @@ async def _graph_get(path: str, params: dict[str, str] | None = None, *, beta: b
                 response=resp,
             )
         return resp.json()
+
+
+async def _arm_get(path: str, api_version: str = ARM_PIM_API_VERSION) -> dict[str, Any]:
+    """Authenticated GET against Azure Resource Manager (app-only via MI).
+
+    Wave C 0.10.0 — companion to ``_graph_get`` for the three ARM tools that
+    cover Azure-RBAC PIM (subscription/RG/resource scope). The MI must hold
+    at minimum ``Reader`` on every scope it will be asked about; for the PIM
+    request collection it specifically needs ``Microsoft.Authorization/
+    roleAssignmentScheduleRequests/read`` (covered by Reader).
+
+    Args:
+        path: ARM path beginning with ``/`` (e.g. ``/subscriptions/{id}/...``).
+        api_version: ARM api-version. Defaults to the PIM-on-Azure-resources
+            version (``2020-10-01``). Use ``ARM_AUTHZ_API_VERSION`` for
+            roleDefinitions reads.
+    """
+    token = await _get_arm_token()
+    url = f"{ARM_BASE_URL}{path}"
+    params = {"api-version": api_version}
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(url, headers=headers, params=params)
+        if resp.status_code >= 400:
+            body = resp.text
+            log.error("ARM %s -> %d: %s", url, resp.status_code, body)
+            raise httpx.HTTPStatusError(
+                f"ARM {resp.status_code} for {path}: {body}",
+                request=resp.request,
+                response=resp,
+            )
+        return resp.json()
+
+
+def _normalize_arm_scope(scope: str) -> str:
+    """Normalize an ARM scope string for path concatenation.
+
+    Accepts either a leading-slash form (``/subscriptions/...``) or a no-slash
+    form (``subscriptions/...``). Returns the canonical leading-slash form
+    with no trailing slash.
+    """
+    if not scope or not isinstance(scope, str):
+        raise ValueError("scope must be a non-empty string (ARM resource path)")
+    s = scope.strip()
+    if not s.startswith("/"):
+        s = "/" + s
+    if len(s) > 1 and s.endswith("/"):
+        s = s.rstrip("/")
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -778,3 +869,292 @@ def register_tools(mcp: FastMCP) -> None:
             "steps": approval.get("value", []),
             "@odata.context": approval.get("@odata.context"),
         }
+
+    # ---------------------------------------------------------------------
+    # Wave C 0.10.0 — ARM (Azure-RBAC PIM) tools
+    # ---------------------------------------------------------------------
+    # The three tools below are the ARM-scoped twins of get_request_status,
+    # get_request_approver, and get_role_definition. They cover PIM activations
+    # at subscription / resource-group / resource scope (Reader, Contributor,
+    # Owner, etc.) — which the Graph endpoints above do NOT see (Graph only
+    # serves directory-scoped PIM for Entra roles like Global Admin).
+    #
+    # The MI must hold ``Reader`` (or stronger) on the scope being read.
+    # No new Graph appRoles required.
+
+    @mcp.tool()
+    async def arm_get_request_status(scope: str, request_id: str) -> dict[str, Any]:
+        """Get the current state of a PIM-on-Azure-resources activation request.
+
+        ARM-scoped twin of ``get_request_status``. Use when the request lives
+        at subscription/RG/resource scope (Azure RBAC roles like Reader,
+        Contributor, Owner) rather than tenant directory scope. The Graph
+        version returns 404 for these requests because the resource graph
+        and directory graph are separate API surfaces.
+
+        Returns enough detail for the agent to evaluate validation rules
+        without falling back to the trigger payload — specifically
+        ``properties.scheduleInfo.expiration.duration`` (R007) and
+        ``properties.justification`` (audit trail).
+
+        Read-only. Requires the MI to hold ``Reader`` (or stronger) on
+        ``scope``. No new appRole grants needed.
+
+        Args:
+            scope: Full ARM scope path of the request, e.g.
+                ``/subscriptions/{sub}/resourceGroups/{rg}``. The leading
+                slash is optional and will be normalized.
+            request_id: GUID of the role assignment schedule request, as
+                returned by the SelfActivate POST.
+
+        Returns:
+            JSON envelope with:
+              - ``requestId``: echo of the input
+              - ``scope``: normalized scope
+              - ``status``: ``properties.status`` (PendingApproval,
+                Provisioned, Denied, Failed, Cancelled, Revoked, ...)
+              - ``durationHours``: parsed integer hours from
+                ``scheduleInfo.expiration.duration`` (e.g. ``"PT1H"`` -> 1).
+                ``None`` when expiration is type ``NoExpiration`` or the
+                duration is not parseable.
+              - ``justification``: requester's justification text
+              - ``ticketInfo``: Jira/ServiceNow ticket metadata if supplied
+              - ``raw``: the full ARM response body for callers needing more
+        """
+        if not request_id or not isinstance(request_id, str):
+            raise ValueError("request_id must be a non-empty string (GUID)")
+        scope_norm = _normalize_arm_scope(scope)
+        path = (
+            f"{scope_norm}/providers/Microsoft.Authorization"
+            f"/roleAssignmentScheduleRequests/{request_id}"
+        )
+        log.info("arm_get_request_status scope=%s request_id=%s", scope_norm, request_id)
+        raw = await _arm_get(path, api_version=ARM_PIM_API_VERSION)
+        props = raw.get("properties", {}) or {}
+
+        # Parse PT<H>H or PT<M>M out of scheduleInfo.expiration.duration.
+        # Most PIM activations use whole-hour ISO-8601 durations (PT1H..PT8H);
+        # we support minutes too for completeness but round to hours.
+        duration_hours: int | None = None
+        sched = props.get("scheduleInfo") or {}
+        expiration = sched.get("expiration") or {}
+        dur = expiration.get("duration")
+        if isinstance(dur, str):
+            m = re.match(r"^PT(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?$", dur)
+            if m and (m.group("h") or m.group("m")):
+                hours = int(m.group("h") or 0)
+                minutes = int(m.group("m") or 0)
+                duration_hours = hours + (1 if minutes >= 30 else 0)
+
+        return {
+            "requestId": request_id,
+            "scope": scope_norm,
+            "status": props.get("status"),
+            "durationHours": duration_hours,
+            "expirationType": expiration.get("type"),
+            "justification": props.get("justification"),
+            "ticketInfo": props.get("ticketInfo"),
+            "principalId": props.get("principalId"),
+            "roleDefinitionId": props.get("roleDefinitionId"),
+            "createdOn": props.get("createdOn"),
+            "raw": raw,
+        }
+
+    @mcp.tool()
+    async def arm_get_request_approver(scope: str, request_id: str) -> dict[str, Any]:
+        """Get approver identity / decision for a PIM-on-Azure-resources request.
+
+        ARM-scoped twin of ``get_request_approver``. Reads the policy
+        assignment that governs the role at ``scope`` and returns its
+        ``Approval_EndUser_Assignment`` rule's ``primaryApprovers`` and
+        ``approvalMode``. For single-stage approval policies with one
+        configured approver this gives the agent the same audit signal as
+        the Graph approval-steps endpoint without needing a per-request
+        callback.
+
+        Limitations:
+          - For multi-stage policies, returns all stages in declaration order.
+          - For dynamic-approver policies (e.g. requester's manager), returns
+            the policy rule shape rather than the resolved approver identity.
+          - Does not return per-request decision timestamps (ARM's PIM data
+            model does not expose them at the schedule-request level the way
+            Graph approval steps do). For final disposition use
+            ``arm_get_request_status``.\u00a0The intersection of "policy says X
+            is the approver" + "request status flipped to Provisioned" is
+            sufficient for most single-approver audit needs.
+
+        Read-only. Requires the MI to hold ``Reader`` (or stronger) on
+        ``scope``.
+
+        Args:
+            scope: ARM scope path of the request.
+            request_id: GUID of the role assignment schedule request (used
+                to look up the role and resolve the governing policy).
+
+        Returns:
+            JSON envelope with:
+              - ``requestId``: echo of the input
+              - ``scope``: normalized scope
+              - ``roleDefinitionId``: ARM role definition ID from the request
+              - ``policyAssignmentName``: name of the resolved policy assignment
+              - ``approvalRequired``: bool
+              - ``approvalMode``: ``SingleStage`` / ``Serial`` / ``NoApproval``
+              - ``stages``: list of stage objects, each with
+                ``approverType``, ``primaryApprovers`` (id/userType/displayName)
+        """
+        if not request_id or not isinstance(request_id, str):
+            raise ValueError("request_id must be a non-empty string (GUID)")
+        scope_norm = _normalize_arm_scope(scope)
+
+        # Step 1: read the request to discover its roleDefinitionId.
+        req_path = (
+            f"{scope_norm}/providers/Microsoft.Authorization"
+            f"/roleAssignmentScheduleRequests/{request_id}"
+        )
+        log.info("arm_get_request_approver scope=%s request_id=%s", scope_norm, request_id)
+        request = await _arm_get(req_path, api_version=ARM_PIM_API_VERSION)
+        role_def_id = (request.get("properties") or {}).get("roleDefinitionId")
+        if not role_def_id:
+            return {
+                "requestId": request_id,
+                "scope": scope_norm,
+                "roleDefinitionId": None,
+                "approvalRequired": None,
+                "approvalMode": None,
+                "stages": [],
+                "note": "Request has no roleDefinitionId — cannot resolve policy.",
+            }
+
+        # Step 2: list policy assignments at scope and find the one for this role.
+        # ARM filter syntax: $filter=atScope() and roleDefinitionId eq '<id>'
+        # The API accepts the filter on the GET collection.
+        from urllib.parse import quote as _q
+
+        filt = f"atScope() and roleDefinitionId eq '{role_def_id}'"
+        safe_chars = "=' "
+        pa_path = (
+            f"{scope_norm}/providers/Microsoft.Authorization"
+            f"/roleManagementPolicyAssignments?$filter={_q(filt, safe=safe_chars)}"
+        )
+        # _arm_get appends api-version itself; embed $filter in the path so it
+        # survives intact (httpx params would re-encode the quotes).
+        pa_resp = await _arm_get(pa_path, api_version=ARM_PIM_API_VERSION)
+        pa_list = pa_resp.get("value", []) or []
+        if not pa_list:
+            return {
+                "requestId": request_id,
+                "scope": scope_norm,
+                "roleDefinitionId": role_def_id,
+                "approvalRequired": None,
+                "approvalMode": None,
+                "stages": [],
+                "note": "No roleManagementPolicyAssignment found for this role at scope.",
+            }
+        pa = pa_list[0]
+        policy_id = (pa.get("properties") or {}).get("policyId")
+        pa_name = pa.get("name")
+        if not policy_id:
+            return {
+                "requestId": request_id,
+                "scope": scope_norm,
+                "roleDefinitionId": role_def_id,
+                "policyAssignmentName": pa_name,
+                "approvalRequired": None,
+                "approvalMode": None,
+                "stages": [],
+                "note": "Policy assignment lacks policyId.",
+            }
+
+        # Step 3: GET the policy and pull the Approval_EndUser_Assignment rule.
+        # policyId is itself a full ARM resource path beginning with '/subscriptions/...'
+        policy = await _arm_get(policy_id, api_version=ARM_PIM_API_VERSION)
+        rules = (policy.get("properties") or {}).get("rules") or []
+        approval_rule = next(
+            (
+                r
+                for r in rules
+                if r.get("id") == "Approval_EndUser_Assignment"
+                or r.get("ruleType") == "RoleManagementPolicyApprovalRule"
+            ),
+            None,
+        )
+        if not approval_rule:
+            return {
+                "requestId": request_id,
+                "scope": scope_norm,
+                "roleDefinitionId": role_def_id,
+                "policyAssignmentName": pa_name,
+                "approvalRequired": False,
+                "approvalMode": "NoApproval",
+                "stages": [],
+                "note": "Policy has no Approval_EndUser_Assignment rule — activations bypass approval.",
+            }
+        setting = approval_rule.get("setting") or {}
+        stages_raw = setting.get("approvalStages") or []
+        stages = [
+            {
+                "approverType": s.get("approvalStageTimeOutInDays") and "TimeBound" or "Standard",
+                "primaryApprovers": s.get("primaryApprovers") or [],
+                "isApproverJustificationRequired": s.get("isApproverJustificationRequired"),
+                "escalationApprovers": s.get("escalationApprovers") or [],
+                "approvalStageTimeOutInDays": s.get("approvalStageTimeOutInDays"),
+            }
+            for s in stages_raw
+        ]
+        return {
+            "requestId": request_id,
+            "scope": scope_norm,
+            "roleDefinitionId": role_def_id,
+            "policyAssignmentName": pa_name,
+            "approvalRequired": bool(setting.get("isApprovalRequired")),
+            "approvalMode": setting.get("approvalMode"),
+            "stages": stages,
+        }
+
+    @mcp.tool()
+    async def arm_get_role_definition(scope: str, role_definition_id: str) -> dict[str, Any]:
+        """Resolve an Azure RBAC role definition by GUID at a given scope.
+
+        ARM-scoped twin of ``get_role_definition``. Use when the
+        ``roleDefinitionId`` belongs to Azure RBAC (Reader =
+        ``acdd72a7-3385-48ef-bd42-f606fba81ae7``, Contributor =
+        ``b24988ac-...``, etc.) rather than to a directory role.
+
+        Returns the role's display name, description, type (BuiltInRole vs
+        CustomRole), and assignable scopes — enough for the agent to cite
+        the role by name in audit comments and to evaluate role-allowlist
+        rules (R005) without depending on the trigger payload.
+
+        Read-only. Requires the MI to hold ``Reader`` (or stronger) on
+        ``scope``.
+
+        Args:
+            scope: ARM scope path. The role-definitions endpoint is
+                scope-bound, so pass the scope of the request being audited.
+            role_definition_id: GUID of the Azure RBAC role definition.
+
+        Returns:
+            JSON envelope with id, roleName, description, type, scope,
+            and the raw ARM body.
+        """
+        if not role_definition_id or not isinstance(role_definition_id, str):
+            raise ValueError("role_definition_id must be a non-empty string (GUID)")
+        scope_norm = _normalize_arm_scope(scope)
+        path = (
+            f"{scope_norm}/providers/Microsoft.Authorization"
+            f"/roleDefinitions/{role_definition_id}"
+        )
+        log.info("arm_get_role_definition scope=%s role_definition_id=%s", scope_norm, role_definition_id)
+        raw = await _arm_get(path, api_version=ARM_AUTHZ_API_VERSION)
+        props = raw.get("properties", {}) or {}
+        return {
+            "id": raw.get("id"),
+            "name": raw.get("name"),
+            "roleName": props.get("roleName"),
+            "description": props.get("description"),
+            "type": props.get("type"),  # BuiltInRole | CustomRole
+            "scope": scope_norm,
+            "assignableScopes": props.get("assignableScopes"),
+            "raw": raw,
+        }
+
