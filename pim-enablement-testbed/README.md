@@ -408,19 +408,23 @@ pim-enablement-testbed/
 | **W1** | Provision test tenant + RG; provision Enterprise MCP Server; MCP Client app; service-account user | ✅ |
 | **W1** | Build + deploy `pim-mcp` 0.2.4 to ACA; MI bound; smoke test green | ✅ |
 | **W1** | Agent knowledge file + Adaptive Card + placeholder rules | ✅ |
-| **W2** (now) | E2E test plan; create test users; assign eligibility; configure approval; trigger activation; full chain validated | ✅ Steps 2–4 |
-| **W2** | Wire `pim-mcp` into Azure SRE Agent; run prompt validations 5a/5b/6/8 | 🟡 in progress |
-| **W2** | Latency loop (p50/p95); approver flow + post-approval re-check | ⬜ |
-| **W3** | Wire Jira MCP + Teams webhook; first true end-to-end (PIM event → recommendation → card) | ⬜ |
-| **W3** | Failure-path scenarios; demo walkthrough; threat-model note finalize | ⬜ |
-| **W4** | Buffer / iterate; rehearse | ⬜ |
+| **W2** | E2E test plan; create test users; assign eligibility; configure approval; trigger activation; full chain validated | ✅ |
+| **W2** | Wire `pim-mcp` into Azure SRE Agent; run prompt validations 5a/5b/6/8 | ✅ |
+| **W2** | Latency loop (p50/p95); approver flow + post-approval re-check | ✅ (cold 10.5 s · warm p50 4.2 s / p95 6.3 s, May 8) |
+| **W3** | Wire Jira MCP + Teams webhook; first true end-to-end (PIM event → recommendation → card) | ✅ Jira write-back (SCRUM-16, May 8); Teams webhook deferred — Jira audit trail satisfies banking compliance ask |
+| **W3** | Failure-path scenarios; demo walkthrough; threat-model note finalize | ✅ Wave B F1–F6 (Deny / Human-Review paths) + Wave C F7–F9 (Approve path) all green; threat-model note in `knowledge.md` §3b |
+| **W3 (now)** | **Wave C — ARM-PIM tools** (`pim-mcp 0.10.0`: `arm_get_request_status` / `arm_get_request_approver` / `arm_get_role_definition`); payload-vs-ARM authority defence demonstrated end-to-end (F9, May 13) | ✅ |
+| **W4** | Buffer / iterate; rehearse | 🟡 in progress |
+| **W4** | **Wave D — hardening backlog**: multi-stage approver-policy walk (`walkSteps`), subscription + management-group scopes (R006b / R006c stress), high-risk role Deny path via ARM authority, `fire-sre-agent-trigger.sh` payload cleanup | ⬜ |
 | **W5** (mid-June) | Internal demo to Poornika / Jiban / Richard | ⬜ |
 | **W6** | Iterate on Zafin's actual rule table once received; customer demo | ⬜ |
 
 > The Enterprise MCP server pivot collapsed the original PIM-MCP build into
 > ~2 days of provisioning + a single-tool gap-filler. Layers 1 and 2 are
-> validated end-to-end as of May 7. Remaining work is SRE-Agent-side surface
-> wiring + rule iteration.
+> validated end-to-end as of May 7. **Wave A** (Entra-PIM E2E) closed May 8,
+> **Wave B** (validation-rules v3 + failure paths) closed May 12, and
+> **Wave C** (ARM-PIM tools + payload-vs-ARM authority defence) closed
+> May 13 with F9. Remaining work: Wave D hardening + rehearsal.
 
 ---
 
