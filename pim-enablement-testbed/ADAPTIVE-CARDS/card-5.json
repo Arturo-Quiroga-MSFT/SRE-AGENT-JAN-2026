@@ -1,0 +1,112 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "Container",
+      "style": "warning",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "⚠ HUMAN REVIEW NEEDED",
+          "weight": "Bolder",
+          "size": "Large",
+          "color": "Warning"
+        },
+        {
+          "type": "TextBlock",
+          "text": "PIM activation request requires senior approver decision.",
+          "wrap": true,
+          "spacing": "Small"
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "Request ID", "value": "502e2ccc-8f6d-4f95-8912-e7c6b2b62fd8" },
+        { "title": "Source", "value": "wave-c-f7-arm-tools-live" },
+        { "title": "Requester", "value": "PIM Test Requester (pim-requester@MngEnvMCAP094150.onmicrosoft.com)" },
+        { "title": "Account Enabled", "value": "true" },
+        { "title": "Role", "value": "Privileged Role Administrator (built-in, HIGH-RISK)" },
+        { "title": "Scope", "value": "/subscriptions/7a28b21e-.../resourceGroups/rg-pim-testbed" },
+        { "title": "Duration", "value": "PT1H" },
+        { "title": "Ticket", "value": "SCRUM-26 (Done / Story)" },
+        { "title": "Justification", "value": "Wave C F7 - first run with pim-mcp 0.10.0 ARM tools deployed and Knowledge files re-uploaded" },
+        { "title": "Groups", "value": "a19dbeba-9826-4954-bde8-effef5dc7e85 (test-tenant-oncall)" },
+        { "title": "Active Assignments", "value": "0" },
+        { "title": "Recent Activations (24h)", "value": "0 Provisioned/Granted (2 Denied)" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Validation Checklist",
+      "weight": "Bolder",
+      "size": "Medium",
+      "spacing": "Large"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "R001 ticket_id_format_match", "value": "✅ PASS" },
+        { "title": "R001b ticket_exists", "value": "✅ PASS" },
+        { "title": "R001c ticket_state_not_in", "value": "❌ FAIL → Reject" },
+        { "title": "R001d ticket_type_in", "value": "❌ FAIL → HumanReview" },
+        { "title": "R002 ticket_age_max_hours", "value": "✅ PASS" },
+        { "title": "R003 requester_linked_to_ticket", "value": "✅ PASS" },
+        { "title": "R004 group_membership_any", "value": "✅ PASS" },
+        { "title": "R005 role_in_allowlist", "value": "❌ FAIL → Reject" },
+        { "title": "R005b role_in_high_risk_catalog", "value": "❌ FAIL → HumanReview" },
+        { "title": "R006 scope_prefix_in_allowlist", "value": "✅ PASS" },
+        { "title": "R006b scope_is_tenant_root", "value": "✅ PASS" },
+        { "title": "R006c scope_is_management_group", "value": "✅ PASS" },
+        { "title": "R007 activation_duration_max_hours", "value": "✅ PASS" },
+        { "title": "R008 recent_activations_max", "value": "✅ PASS" }
+      ]
+    },
+    {
+      "type": "Container",
+      "style": "warning",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "FINAL VERDICT: Human Review Needed",
+          "weight": "Bolder",
+          "size": "Medium",
+          "color": "Warning"
+        },
+        {
+          "type": "TextBlock",
+          "text": "R005b (Privileged Role Administrator in high-risk catalog) and R001d (ticket type \"Story\" not in operational-type allowlist) carry decision_on_fail: HumanReview, trumping R001c/R005 Reject. Senior approver must own this decision.",
+          "wrap": true,
+          "spacing": "Small"
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Agent: Azure SRE Agent (aq-main) | 2026-05-13T16:53:00Z | Source: wave-c-f7-arm-tools-live",
+      "size": "Small",
+      "isSubtle": true,
+      "spacing": "Large"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open in PIM Portal",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade/~/aadmigratedroles"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Audit Ticket",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-37"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Source Ticket",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-26"
+    }
+  ]
+}
