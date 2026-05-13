@@ -1,7 +1,7 @@
 # PIM Enablement Testbed
 
 > Azure SRE Agent — PIM Enablement use case for Zafin
-> Status: **E2E validated for Entra-PIM (May 8, 2026); ARM-PIM tools shipped (May 13, 2026)** · Layer 1 / 2 / 3 green; Wave C (ARM-PIM) live in pim-mcp 0.10.0
+> Status: **Wave C end-to-end Approve path closed (May 13, 2026)** · Entra-PIM E2E validated (May 8) · ARM-PIM tools live in `pim-mcp 0.10.0` and demonstrably exercised by the agent against a real `PendingApproval` request (F9, May 13) · Layer 1 / 2 / 3 green
 > Architecture: **Hybrid — Enterprise MCP + custom pim-mcp covering both PIM systems (Graph + ARM)**
 > Target: mid-June 2026 internal demo · end-of-June customer-facing demo
 
@@ -82,6 +82,83 @@ and the standalone deck
 6. **Approver discovery on ARM scopes is a 3-hop walk.** ARM does not return the policy inline on the request. `arm_get_request_approver` does: GET request → roleDefinitionId → LIST `roleManagementPolicyAssignments?$filter=atScope() and roleDefinitionId eq '<id>'` → GET `policyId` → read `Approval_EndUser_Assignment` rule. The MI needs `Reader` on the scope; that single role covers both `roleAssignmentScheduleRequests/read` and `roleManagementPolicyAssignments/read`.
 7. **Duration parsing belongs server-side.** ARM returns ISO 8601 (`PT1H`, `PT30M`). Doing the regex in the agent prompt is brittle; `arm_get_request_status` parses it into `durationHours: int` so validation rule R007 reads a clean number. Same payload also exposes `durationHours` directly on the trigger as a fallback (see `agent/knowledge.md` §3a).
 8. **Foundry caches the connector's tool list.** After deploying a new pim-mcp version with new tools, the SRE Agent UI must be told to refresh the connector or the new tools never appear in the toolbox. `scripts/redeploy-pim-mcp.sh` prints the reminder.
+
+### Wave C completion (May 13, 2026) — F-series end-to-end Approve path
+
+The F-series runs (F1→F9) walk a real Azure RBAC `PendingApproval` request through the agent. Highlights from the last three runs that close the wave:
+
+| Run | Verdict | `arm_*` tools invoked? | Audit ticket | Key proof point |
+|---|---|---|---|---|
+| **F7** | Human-Review-Needed | ❌ (advisory only) | SCRUM-37 | Validation-rules v3 schema (14 rules) loaded; URL fix (`ApproveRequestMenuBlade`) sticks |
+| **F8** | ✅ 14/14 PASS Approve | ❌ sub-agent tool-list gap | SCRUM-38 | First all-green Approve verdict against a real ARM PIM request (payload-luck) |
+| **F9** | ✅ 14/14 PASS Approve | ✅ `arm_get_request_status` + `arm_get_request_approver` | SCRUM-39 | ARM REST overrode bogus trigger payload (`Privileged Role Administrator` → actual `Reader`); R005 / R005b / R007 evaluated against ARM ground truth |
+
+**New behaviour that ships in Wave C (and is partner-demoable):**
+
+9. **`pim-recommender` sub-agent inherits tools — but per-agent selection overrides connector scope.** F8 reached the right verdict for the wrong reason because the three new `arm_*` tools were enabled on the `PIM-MCP` connector but **not** ticked in `pim-recommender` → `Edit custom agent` → `Choose tools`. Lesson: when shipping a new pim-mcp version with new tools, refresh **both** the connector tool selection **and** every sub-agent's per-agent tool list.
+10. **Payload-vs-ARM authority defence.** When the HTTP trigger payload conflicts with ARM REST for an ARM-scoped request, the agent now treats ARM as authoritative, evaluates every rule against ARM ground truth, and surfaces the discrepancy explicitly in the Adaptive Card (`⚠️ Note` row) and audit ticket. This guards against malformed or malicious triggers that lie about role/scope.
+11. **Server-side duration parsing on R007.** `arm_get_request_status.scheduleInfo.expiration.duration` (`PT1H`, ISO 8601) is parsed inside pim-mcp — the agent reads a clean number, no regex in the prompt. Payload `durationHours` becomes a fallback per `knowledge.md` §3a.
+12. **Single-stage approver resolved automatically.** `arm_get_request_approver` returns `approvalMode: SingleStage` plus primary approver UPN; the agent uses both as inputs to the email and audit ticket (and as a secondary signal for R003 when identity-map is missing).
+
+**Wave C “done” criteria — all green:**
+
+- [x] pim-mcp 0.10.0 deployed (13 tools) and selected on `aq-main` connector
+- [x] Same 13 tools enabled on `pim-recommender` sub-agent
+- [x] All three `arm_*` tools observably invoked by the agent on a real ARM PIM request (F9)
+- [x] ARM REST treated as authoritative when trigger payload conflicts (F9)
+- [x] 14/14 PASS Approve verdict against real `PendingApproval` request (F8 + F9)
+- [x] Full output triplet emitted: green Adaptive Card, Approve email, Jira audit ticket with full reasoning chain (every F-run)
+- [x] Canonical PIM portal URL on every card (`ApproveRequestMenuBlade/~/aadmigratedroles`)
+
+**Open hardening for Wave D (NOT Wave C blockers):**
+
+- Multi-stage approver-policy walk (`walkSteps` traversal) — needs a role-management policy change to MultiStage
+- Subscription-scoped + management-group-scoped requests — stress R006b / R006c at higher scope levels
+- High-risk role **Deny** path with ARM authority (e.g., Owner request denied via `arm_get_request_status` ground truth)
+- Cosmetic: strip hardcoded `Privileged Role Administrator` default out of `scripts/fire-sre-agent-trigger.sh` (the agent now corrects it, but the default is misleading in logs)
+
+Full F-series transcripts and Adaptive Cards live in `SRE-AGENT-CHATS/` and `ADAPTIVE-CARDS/` — see the **Example artifacts for partner share** section below.
+
+---
+
+## Example artifacts for partner share
+
+These files document the full Wave C demo and are safe to share with Zafin. Each is repo-relative.
+
+### Formal transcripts (`SRE-AGENT-CHATS/`)
+
+Each numbered `NN.md` is a curated, partner-readable write-up of one agent run. The matching `NN-raw.md` is the unedited transcript copied straight from the SRE Agent UI — useful when Zafin engineers want to see exactly what tool calls the agent made.
+
+| File | What it shows |
+|---|---|
+| [`SRE-AGENT-CHATS/24.md`](SRE-AGENT-CHATS/24.md) (F7) | First end-to-end Human-Review-Needed run on a real ARM PIM request — validates v3 schema + canonical PIM portal URL |
+| [`SRE-AGENT-CHATS/25.md`](SRE-AGENT-CHATS/25.md) (F8) | First **14/14 PASS Approve** verdict; documents the `arm_*`-tools sub-agent-scope gap and its root-cause correction |
+| [`SRE-AGENT-CHATS/26.md`](SRE-AGENT-CHATS/26.md) (F9) | **Wave C closer** — `arm_*` tools live, payload-vs-ARM authority defence, server-side duration parsing |
+| `SRE-AGENT-CHATS/24-raw.md` / `25-raw.md` / `26-raw.md` | Unedited UI transcripts for each run |
+
+### Adaptive Cards (`ADAPTIVE-CARDS/`)
+
+The Adaptive Card is what an approver sees in Teams. JSON is preserved verbatim so Zafin can paste it into <https://adaptivecards.io/designer> to inspect / theme.
+
+| File | Verdict | Notable |
+|---|---|---|
+| [`ADAPTIVE-CARDS/card-5.json`](ADAPTIVE-CARDS/card-5.json) (F7) | Human Review Needed | Yellow `warning` style; v3 14-rule checklist |
+| [`ADAPTIVE-CARDS/card-6.json`](ADAPTIVE-CARDS/card-6.json) (F8) | Approve | Green `good` style; first all-green card |
+| [`ADAPTIVE-CARDS/card-7.json`](ADAPTIVE-CARDS/card-7.json) (F9) | Approve | Green `good` style + explicit `⚠️ Note` row surfacing the payload-vs-ARM discrepancy (production guard-rail story) |
+
+### Approver email (sample)
+
+The `SendOutlookEmail` tool sends an approver-pastable triage email on every run. F9's email banner reads `[PIM] Approve — Reader for pim-requester@MngEnvMCAP094150.onmicrosoft.com` and is mirrored in the Jira audit ticket comment on **SCRUM-39** — viewable at <https://aq-r2d2.atlassian.net/browse/SCRUM-39> (Zafin Atlassian Cloud tenant). The same comment is preserved verbatim in [`SRE-AGENT-CHATS/26.md`](SRE-AGENT-CHATS/26.md) under the **Outputs delivered** table for partners who don't have Jira access.
+
+### Audit-trail chain
+
+| F-run | Audit ticket | Source ticket | PIM portal link |
+|---|---|---|---|
+| F7 | SCRUM-37 | SCRUM-32 | `ApproveRequestMenuBlade/~/aadmigratedroles` |
+| F8 | SCRUM-38 | SCRUM-34 | `ApproveRequestMenuBlade/~/aadmigratedroles` |
+| F9 | SCRUM-39 | SCRUM-34 | `ApproveRequestMenuBlade/~/aadmigratedroles` |
+
+Each audit ticket links back to the source ticket via `jira_create_remote_issue_link` so the full chain (source ticket → PIM request → agent reasoning → approver action) is traversable in one direction inside Jira.
 
 ---
 
