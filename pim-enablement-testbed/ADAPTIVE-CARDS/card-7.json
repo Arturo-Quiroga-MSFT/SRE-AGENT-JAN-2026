@@ -1,0 +1,73 @@
+{
+  "type": "AdaptiveCard",
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "Container",
+      "style": "good",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "✅ FINAL VERDICT: Approve",
+          "weight": "Bolder",
+          "size": "Large",
+          "color": "Good"
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "PIM Activation Request Evaluation",
+      "weight": "Bolder",
+      "size": "Medium"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        {"title": "Request ID", "value": "d407dd65-3e81-44b9-a7d6-c9fe86062051"},
+        {"title": "Requester", "value": "PIM Test Requester (pim-requester@MngEnvMCAP094150.onmicrosoft.com)"},
+        {"title": "Role (ARM)", "value": "Reader (acdd72a7-3385-48ef-bd42-f606fba81ae7)"},
+        {"title": "Scope", "value": "/subscriptions/7a28b21e-.../resourceGroups/rg-pim-testbed"},
+        {"title": "Duration", "value": "PT1H (1 hour)"},
+        {"title": "Ticket", "value": "SCRUM-34 (Task — To Do)"},
+        {"title": "Justification", "value": "Wave B real PIM activation: read-only investigation against rg-pim-testbed for SCRUM-34"},
+        {"title": "Approver", "value": "PIM Test Approver (pim-approver@MngEnvMCAP094150.onmicrosoft.com)"},
+        {"title": "Source", "value": "wave-c-f9-arm-tools-subagent-fix"},
+        {"title": "Evaluated At", "value": "2026-05-13T18:35:00Z"}
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Validation Checklist (14/14 PASS)",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "✅ R001 ticket_id_format_match\n✅ R001b ticket_exists\n✅ R001c ticket_state_not_in\n✅ R001d ticket_type_in\n✅ R002 ticket_age_max_hours\n✅ R003 requester_linked_to_ticket\n✅ R004 group_membership_any\n✅ R005 role_in_allowlist\n✅ R005b role_in_high_risk_catalog\n✅ R006 scope_prefix_in_allowlist\n✅ R006b scope_is_tenant_root\n✅ R006c scope_is_management_group\n✅ R007 activation_duration_max_hours\n✅ R008 recent_activations_max",
+      "wrap": true,
+      "fontType": "Monospace"
+    },
+    {
+      "type": "TextBlock",
+      "text": "⚠️ Note: Trigger payload claimed Privileged Role Administrator but ARM REST authoritatively shows Reader. Evaluation uses ARM data.",
+      "wrap": true,
+      "isSubtle": true,
+      "separator": true
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open in PIM Portal",
+      "url": "https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade/~/aadmigratedroles"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Ticket (SCRUM-34)",
+      "url": "https://aq-r2d2.atlassian.net/browse/SCRUM-34"
+    }
+  ]
+}
