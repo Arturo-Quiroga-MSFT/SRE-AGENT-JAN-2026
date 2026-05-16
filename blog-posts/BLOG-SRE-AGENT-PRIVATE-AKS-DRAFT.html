@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Making Azure SRE Agent Work on Locked-Down AKS Clusters</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="preview.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Making Azure SRE Agent Work on Locked-Down AKS
+Clusters</h1>
+</header>
+<h1 id="making-azure-sre-agent-work-on-locked-down-aks-clusters">Making
+Azure SRE Agent Work on Locked-Down AKS Clusters</h1>
+<p><em>Author: Arturo Quiroga, Azure AI Services Engineer - Americas Enterprise Partner Solutions (AEPS) - Partner Solutions Architect (PSA)</em>
+</p>
+<hr />
+<p>Enterprise SRE teams typically operate in environments where their
+clusters are completely private, have disabled local accounts, they
+enforce Azure RBAC for Kubernetes authorization, restrict API server
+access with authorized IP ranges, and run nodes inside VNet subnets with
+strict network policies. Diagnosing and mitigating incidents on these
+clusters — reading pod status, inspecting events, viewing logs, and
+sometimes applying fixes — requires the SRE Agent to authenticate
+through multiple layers.</p>
+<p>This post covers what we learned deploying Azure SRE Agent against
+hardened AKS clusters: the dual-layer authorization model, the exact
+role assignments needed for both read and write operations, and the
+gotchas that tripped us up along the way. These findings come from
+reproducing a real enterprise cluster configuration in a testbed
+environment and systematically resolving every Forbidden error we
+encountered.</p>
+<hr />
+<h2 id="the-enterprise-aks-security-spectrum">The enterprise AKS
+security spectrum</h2>
+<p>Enterprise AKS clusters exist on a spectrum from open to fully
+locked. The table below shows how each configuration affects SRE Agent
+access:</p>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
+<thead>
+<tr style="background:#f2f2f2;"><th style="width:26%;">Configuration</th><th style="width:18%;">API server access</th><th style="width:28%;">SRE Agent access</th><th style="width:28%;">Works?</th></tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Public</strong> (defaults)</td>
+<td>Open</td>
+<td>Direct or command invoke</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Public + authorized IPs</strong></td>
+<td>IP-restricted</td>
+<td>Command invoke (ARM bypass)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Public + Azure RBAC + no local accounts</strong></td>
+<td>Azure RBAC only</td>
+<td>Command invoke + dual-layer roles</td>
+<td>Yes (with correct roles)</td>
+</tr>
+<tr>
+<td><strong>Private</strong> (private endpoint)</td>
+<td>VNet only</td>
+<td>Command invoke (ARM bypass)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Private + Azure RBAC + authorized IPs</strong></td>
+<td>Fully locked</td>
+<td>Command invoke + dual-layer roles</td>
+<td>Yes (with correct roles)</td>
+</tr>
+</tbody>
+</table>
+<p><em>Figure 1: The AKS security spectrum. SRE Agent can reach any
+cluster through command invoke. The challenge is always authorization,
+not connectivity.</em></p>
+<p>The pattern is consistent: <code>az aks command invoke</code> through
+the ARM layer provides access across these configurations. This post
+focuses on the “with correct roles” part — which is where most teams get
+stuck.</p>
+<hr />
+<h2 id="how-sre-agent-reaches-a-locked-down-cluster">How SRE Agent
+reaches a locked-down cluster</h2>
+<p>Azure SRE Agent doesn’t connect directly to the Kubernetes API
+server. It uses <code>az aks command invoke</code>, which routes through
+the Azure Resource Manager (ARM) layer. ARM spins up a short-lived
+command pod inside the cluster, runs your kubectl command, and returns
+the output.</p>
+<p>This architecture is significant for two reasons:</p>
+<ol type="1">
+<li><p><strong>Network restrictions on the API server don’t block
+ARM-based access.</strong> Authorized IP ranges, private endpoints, and
+NSG rules restrict direct API server connections, but ARM API calls
+follow a separate path. The SRE Agent can reach your cluster through ARM
+even when direct kubectl access from your workstation is blocked.</p></li>
+<li><p><strong>Authorization happens at two layers, not one.</strong>
+ARM checks whether the identity has permission to call
+<code>runCommand/action</code> (control plane). Then the Kubernetes API
+server checks whether that identity has data-plane access via Azure RBAC
+roles. Both checks must pass.</p></li>
+</ol>
+<figure>
+<img src="pictures/Figure-2.png"
+alt="Dual-layer authorization flow for SRE Agent on hardened AKS clusters." />
+<figcaption aria-hidden="true">Dual-layer authorization flow for SRE
+Agent on hardened AKS clusters.</figcaption>
+</figure>
+<blockquote>
+<p><strong>Figure 2.</strong> Dual-layer authorization flow for SRE
+Agent on hardened AKS clusters. The ARM layer validates control-plane
+permissions, then the Kubernetes API server validates data-plane
+permissions.</p>
+</blockquote>
+<details>
+<summary>
+Mermaid source for Figure 2
+</summary>
+<pre class="mermaid"><code>flowchart TB
+    subgraph agent[&quot;Azure SRE Agent&quot;]
+        MI[&quot;Managed Identity (UAMI)&quot;]
+    end
+
+    subgraph arm[&quot;Azure Resource Manager&quot;]
+        ARM_CHECK[&quot;Control-plane check:&lt;br/&gt;runcommand/action permission&quot;]
+    end
+
+    subgraph cluster[&quot;AKS Cluster&quot;]
+        CMD[&quot;Command pod&lt;br/&gt;(short-lived)&quot;]
+        K8S_CHECK[&quot;Data-plane check:&lt;br/&gt;Azure RBAC role&lt;br/&gt;(e.g., AKS RBAC Reader)&quot;]
+        K8S_API[&quot;Kubernetes API Server&quot;]
+    end
+
+    MI --&gt;|&quot;az aks command invoke&quot;| ARM_CHECK
+    ARM_CHECK --&gt;|&quot;Spins up command pod&quot;| CMD
+    CMD --&gt; K8S_CHECK
+    K8S_CHECK --&gt;|&quot;Authorized&quot;| K8S_API
+    K8S_API --&gt;|&quot;kubectl output&quot;| MI
+
+    style agent fill:#0078D4,color:#fff
+    style arm fill:#50E6FF,color:#000
+    style cluster fill:#F2F2F2,color:#000
+    style ARM_CHECK fill:#C3F73A,color:#000
+    style K8S_CHECK fill:#C3F73A,color:#000</code></pre>
+</details>
+<p>If either layer is missing, <code>kubectl</code> returns
+<code>Forbidden</code> — even for the subscription Owner.</p>
+<hr />
+<h2 id="the-four-roles-your-sre-agent-needs">The four roles your SRE
+agent needs</h2>
+<p>Through testing on a cluster configured with
+<code>disableLocalAccounts: true</code> and
+<code>enableAzureRBAC: true</code>, we identified the minimum role set
+for read-only SRE access:</p>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
+<thead>
+<tr style="background:#f2f2f2;"><th style="width:5%;">#</th><th style="width:25%;">Role</th><th style="width:15%;">Type</th><th style="width:22%;">Scope</th><th style="width:33%;">Purpose</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Reader</strong></td>
+<td>Built-in</td>
+<td>Resource group</td>
+<td>ARM metadata reads (<code>az aks show</code>, resource listing)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>AKS ReadOnly Command Invoke</strong></td>
+<td>Custom (4 actions)</td>
+<td>AKS cluster</td>
+<td>Grants <code>runCommand/action</code> at the ARM layer</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Log Analytics Reader</strong></td>
+<td>Built-in</td>
+<td>Log Analytics workspace</td>
+<td>Query container logs via KQL</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>AKS RBAC Reader</strong></td>
+<td>Built-in</td>
+<td>AKS cluster</td>
+<td>Kubernetes data-plane reads (<code>get pods</code>,
+<code>describe</code>, <code>get nodes</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The custom role contains exactly four actions — nothing more:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;actions&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;Microsoft.ContainerService/managedClusters/read&quot;</span><span class="ot">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;Microsoft.ContainerService/managedClusters/listClusterUserCredential/action&quot;</span><span class="ot">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;Microsoft.ContainerService/managedClusters/runcommand/action&quot;</span><span class="ot">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;Microsoft.ContainerService/managedClusters/commandResults/read&quot;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;dataActions&quot;</span><span class="fu">:</span> <span class="ot">[]</span><span class="fu">,</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;notActions&quot;</span><span class="fu">:</span> <span class="ot">[]</span><span class="fu">,</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;notDataActions&quot;</span><span class="fu">:</span> <span class="ot">[]</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p><em>Figure 3: The custom role definition for least-privilege command
+invoke access.</em></p>
+<p>This is a least-privilege pattern. The SRE Agent can observe your
+cluster without permission to modify resources through the assigned
+roles.</p>
+<p>To verify the assignments are in place, query by the agent’s managed
+identity object ID and filter to the cluster’s resource group. We use
+the CLI here rather than the Azure Portal because — as covered in Gotcha
+2 below — the Portal’s <strong>Check access</strong> panel may show zero
+assignments even when the roles are correctly configured and
+working:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> role assignment list <span class="dt">\</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--assignee-object-id</span> <span class="va">$MI_OBJECT_ID</span> <span class="at">--all</span> <span class="dt">\</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--query</span> <span class="st">&quot;[?contains(scope, &#39;&lt;your-rg&gt;&#39;)].{Role:roleDefinitionName, Scope:scope}&quot;</span> <span class="dt">\</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-o</span> table</span></code></pre></div>
+<figure>
+<img src="pictures/Figure-4.png"
+alt="CLI output showing the four role assignments on the SRE Agent’s managed identity, scoped to the locked-down AKS resource group." />
+<figcaption aria-hidden="true">CLI output showing the four role
+assignments on the SRE Agent’s managed identity, scoped to the
+locked-down AKS resource group.</figcaption>
+</figure>
+<blockquote>
+<p><strong>Figure 4.</strong> CLI output showing the four role
+assignments on the SRE Agent’s managed identity, scoped to the
+locked-down AKS resource group: Reader, AKS ReadOnly Command Invoke,
+Azure Kubernetes Service RBAC Reader, and Log Analytics Reader.</p>
+</blockquote>
+<blockquote>
+<p><strong>Common mistake:</strong> The built-in
+<code>Azure Kubernetes Service Cluster User Role</code> does
+<strong>not</strong> include <code>runcommand/action</code>. It only
+grants <code>listClusterUserCredential/action</code>, which is for
+<code>az aks get-credentials</code> — useless on a cluster with local
+accounts disabled. If the SRE Agent recommends this role, override
+it.</p>
+</blockquote>
+<hr />
+<h2 id="three-gotchas-we-found-the-hard-way">Three gotchas we found the
+hard way</h2>
+<h3 id="gotcha-1-azure-rbac-blocks-everyone-including-owner">Gotcha 1:
+Azure RBAC blocks everyone — including Owner</h3>
+<p>When <code>enableAzureRBAC: true</code> and
+<code>disableLocalAccounts: true</code>, the cluster uses Azure role
+assignments for all Kubernetes authorization. No Azure RBAC data-plane
+role means no access — for anyone.</p>
+<p>This catches teams off guard because subscription Owners have full
+ARM access but no Kubernetes data-plane access by default. The first
+<code>kubectl get pods</code> after enabling Azure RBAC returns
+this:</p>
+<pre><code>User &quot;admin@contoso.com&quot; cannot get resource &quot;namespaces&quot;
+in API group &quot;&quot; in the namespace &quot;default&quot;:
+User does not have access to the resource in Azure.
+Update role assignment to allow access.</code></pre>
+<figure>
+<img src="pictures/Figure-5.png"
+alt="Terminal output of kubectl get pods returning a Forbidden error before any data-plane role is assigned." />
+<figcaption aria-hidden="true">Terminal output of kubectl get pods
+returning a Forbidden error before any data-plane role is
+assigned.</figcaption>
+</figure>
+<blockquote>
+<p><strong>Figure 5.</strong> The Forbidden error returned when Azure
+RBAC is enabled but no data-plane role is assigned. This error appears
+even for subscription Owners.</p>
+</blockquote>
+<p><strong>Fix:</strong> Assign <code>AKS RBAC Reader</code> (or
+<code>AKS RBAC Cluster Admin</code> for full access) to the identity at
+the AKS cluster scope. This applies to each user and managed identity
+that needs cluster access — including the SRE Agent.</p>
+<h3
+id="gotcha-2-app-id-vs-object-id-the-identity-resolution-trap">Gotcha 2:
+App ID vs Object ID — the identity resolution trap</h3>
+<p>Azure managed identities have two identifiers:</p>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
+<thead>
+<tr style="background:#f2f2f2;"><th style="width:28%;">Identifier</th><th style="width:30%;">Example</th><th style="width:42%;">Where it appears</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>App (Client) ID</td>
+<td><code>5ef3d54d-b401-...</code></td>
+<td>Token claims, <code>az login --identity</code> output</td>
+</tr>
+<tr>
+<td>SP Object (Principal) ID</td>
+<td><code>f54ae888-64d7-...</code></td>
+<td>Portal identity panels, Microsoft Entra ID</td>
+</tr>
+</tbody>
+</table>
+<p>Both identifiers resolve correctly at <strong>runtime</strong> —
+<code>az role assignment create --assignee</code> and
+<code>az role assignment list --assignee --all</code> accept either one
+and return identical results. The CLI handles the translation
+transparently.</p>
+<p>The trap is the <strong>Azure Portal</strong>. When you open your AKS
+cluster’s <strong>Access control (IAM) &gt; Check access</strong>,
+select “Managed identity,” and pick the SRE Agent identity, the panel
+shows <strong>Role assignments (0)</strong>. Zero. This is alarming —
+your agent is working, but the portal says it has no permissions.</p>
+<p>What happens: the Check access panel resolves the identity by its
+display name and matches it to the <strong>principal ID</strong>. If the
+role assignments were originally created using the <strong>client
+ID</strong> (which
+<code>az role assignment create --assignee &lt;client-id&gt;</code> does
+by default), the portal’s identity lookup follows a different resolution
+path and fails to surface the assignments.</p>
+<p>The roles are there. The agent works. But the portal says
+otherwise.</p>
+<p><strong>Verification:</strong> Use the CLI to query by scope instead
+of by identity — this reliably returns the current assignments:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Shows ALL role assignments on the cluster, regardless of how they were created</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> role assignment list <span class="dt">\</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--scope</span> <span class="st">&quot;/subscriptions/&lt;sub&gt;/resourceGroups/&lt;rg&gt;/providers/Microsoft.ContainerService/managedClusters/&lt;cluster&gt;&quot;</span> <span class="dt">\</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-o</span> table</span></code></pre></div>
+<blockquote>
+<p><strong>Tip:</strong> If you want the Portal Check access panel to
+work correctly, create role assignments using the <strong>principal
+(object) ID</strong> rather than the client ID. You can find it with
+<code>az identity show --name &lt;name&gt; --resource-group &lt;rg&gt; --query principalId -o tsv</code>.</p>
+</blockquote>
+<h3 id="gotcha-3-aks-rbac-reader-doesnt-include-pod-logs">Gotcha 3: AKS
+RBAC Reader doesn’t include pod logs</h3>
+<p>The built-in <code>AKS RBAC Reader</code> role covers 30+ data
+actions — <code>get pods</code>, <code>get nodes</code>,
+<code>get services</code>, <code>describe</code> — but does
+<strong>not</strong> include:</p>
+<pre><code>Microsoft.ContainerService/managedClusters/pods/log/read</code></pre>
+<p>So <code>kubectl get pods</code> works,
+<code>kubectl describe pod</code> works, but
+<code>kubectl logs &lt;pod&gt;</code> returns
+<code>Forbidden</code>.</p>
+<p><strong>Fix:</strong> If your SRE Agent needs log access for root
+cause analysis, either:</p>
+<ul>
+<li>Add <code>pods/log/read</code> to the custom role’s
+<code>dataActions</code> array, or</li>
+<li>Assign <code>AKS RBAC Writer</code> (which includes log reads but
+also grants create/update — broader than ideal)</li>
+</ul>
+<hr />
+<h2 id="proving-it-works-command-invoke-through-arm">Proving it works:
+command invoke through ARM</h2>
+<p>To validate that <code>az aks command invoke</code> takes a different
+network path than direct kubectl access, we enabled authorized IP ranges
+on our test cluster with CIDRs that <strong>explicitly excluded our own
+IP address</strong>:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> aks update <span class="at">-g</span> rg-sre-locked <span class="at">-n</span> aks-cluster <span class="dt">\</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--api-server-authorized-ip-ranges</span> <span class="st">&quot;52.103.144.0/24,40.97.73.0/25&quot;</span></span></code></pre></div>
+<p>With our IP blocked from the API server, we deployed a full workload
+through command invoke:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> aks command invoke <span class="dt">\</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--resource-group</span> rg-sre-locked <span class="dt">\</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--name</span> aks-cluster <span class="dt">\</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">--command</span> <span class="st">&quot;kubectl apply -f deployment.yaml&quot;</span> <span class="dt">\</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">--file</span> deployment.yaml</span></code></pre></div>
+<p>Result: namespace created, deployment applied, two pods running — all
+through the ARM layer with no direct API server access.</p>
+<figure>
+<img src="pictures/Figure-6.png"
+alt="Terminal output of kubectl get pods showing two pods in Running state via command invoke while the operator’s IP is blocked by authorized IP ranges." />
+<figcaption aria-hidden="true">Terminal output of kubectl get pods
+showing two pods in Running state via command invoke while the
+operator’s IP is blocked by authorized IP ranges.</figcaption>
+</figure>
+<blockquote>
+<p><strong>Figure 6.</strong> Successful kubectl output through command
+invoke with our IP blocked by authorized IP ranges. Command invoke
+follows the ARM path, which is not affected by API server IP
+restrictions.</p>
+</blockquote>
+<p>This confirms that <code>az aks command invoke</code> through ARM
+provides a working access path for clusters with IP restrictions, VNet
+injection, or private endpoint configurations.</p>
+<hr />
+<h2 id="quick-start-minimum-viable-role-setup">Quick-start: minimum
+viable role setup</h2>
+<p>For teams setting up SRE Agent on a hardened cluster, here’s the
+exact sequence:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Get the SRE Agent&#39;s managed identity Object ID</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="va">MI_OBJECT_ID</span><span class="op">=</span><span class="va">$(</span><span class="ex">az</span> ad sp show <span class="at">--id</span> <span class="op">&lt;</span>agent-app-id<span class="op">&gt;</span> --query id <span class="at">-o</span> tsv<span class="va">)</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Get resource IDs</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="va">AKS_ID</span><span class="op">=</span><span class="va">$(</span><span class="ex">az</span> aks show <span class="at">-g</span> <span class="op">&lt;</span>rg<span class="op">&gt;</span> -n <span class="op">&lt;</span>cluster<span class="op">&gt;</span> --query id <span class="at">-o</span> tsv<span class="va">)</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="va">RG_ID</span><span class="op">=</span><span class="va">$(</span><span class="ex">az</span> group show <span class="at">-n</span> <span class="op">&lt;</span>rg<span class="op">&gt;</span> --query id <span class="at">-o</span> tsv<span class="va">)</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="va">LA_ID</span><span class="op">=</span><span class="va">$(</span><span class="ex">az</span> monitor log-analytics workspace show <span class="dt">\</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">-g</span> <span class="op">&lt;</span>rg<span class="op">&gt;</span> -n <span class="op">&lt;</span>workspace<span class="op">&gt;</span> --query id <span class="at">-o</span> tsv<span class="va">)</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Assign the four roles</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> role assignment create <span class="at">--assignee-object-id</span> <span class="va">$MI_OBJECT_ID</span> <span class="dt">\</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">--role</span> <span class="st">&quot;Reader&quot;</span> <span class="at">--scope</span> <span class="va">$RG_ID</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> role assignment create <span class="at">--assignee-object-id</span> <span class="va">$MI_OBJECT_ID</span> <span class="dt">\</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">--role</span> <span class="st">&quot;&lt;custom-role-id&gt;&quot;</span> <span class="at">--scope</span> <span class="va">$AKS_ID</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> role assignment create <span class="at">--assignee-object-id</span> <span class="va">$MI_OBJECT_ID</span> <span class="dt">\</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>  <span class="at">--role</span> <span class="st">&quot;Log Analytics Reader&quot;</span> <span class="at">--scope</span> <span class="va">$LA_ID</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> role assignment create <span class="at">--assignee-object-id</span> <span class="va">$MI_OBJECT_ID</span> <span class="dt">\</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>  <span class="at">--role</span> <span class="st">&quot;Azure Kubernetes Service RBAC Reader&quot;</span> <span class="at">--scope</span> <span class="va">$AKS_ID</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Verify — always use --assignee-object-id, not --assignee</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a><span class="ex">az</span> role assignment list <span class="at">--assignee-object-id</span> <span class="va">$MI_OBJECT_ID</span> <span class="at">--all</span> <span class="dt">\</span></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>  <span class="at">--query</span> <span class="st">&quot;[].{role:roleDefinitionName, scope:scope}&quot;</span> <span class="at">-o</span> table</span></code></pre></div>
+<p><em>Figure 7: Complete role assignment script. Replace placeholders
+with your resource names and IDs.</em></p>
+<hr />
+<h2 id="what-your-sre-agent-can-do-after-setup">What your SRE Agent can
+do after setup</h2>
+<p>With the four-role pattern in place, the SRE Agent can perform the
+core incident investigation workflow:</p>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
+<thead>
+<tr style="background:#f2f2f2;"><th style="width:38%;">Capability</th><th style="width:37%;">kubectl command</th><th style="width:25%;">Status</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>List pods, services, deployments</td>
+<td><code>kubectl get pods -n &lt;ns&gt;</code></td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Describe resources</td>
+<td><code>kubectl describe pod &lt;name&gt;</code></td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Check node status</td>
+<td><code>kubectl get nodes</code></td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Read Kubernetes events</td>
+<td><code>kubectl get events</code></td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Query container logs (KQL)</td>
+<td>Via Log Analytics connector</td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Inspect network policies</td>
+<td><code>kubectl get networkpolicies</code></td>
+<td>Supported</td>
+</tr>
+<tr>
+<td>Read pod logs</td>
+<td><code>kubectl logs &lt;pod&gt;</code></td>
+<td>Requires additional <code>pods/log/read</code> dataAction</td>
+</tr>
+<tr>
+<td>Modify resources</td>
+<td>—</td>
+<td>Blocked by design (read-only)</td>
+</tr>
+</tbody>
+</table>
+<p>This covers incident investigation, health checks, and root cause
+analysis — the core SRE Agent use cases.</p>
+<hr />
+<h2 id="known-limitations">Known limitations</h2>
+<p>The <code>az aks command invoke</code> path works well for AKS
+clusters because ARM can route commands to the cluster’s control plane
+regardless of network restrictions. However, there are boundaries to be
+aware of:</p>
+<p><strong>AKS command invoke is control-plane only.</strong> The SRE
+agent uses ARM to reach the Kubernetes API server, which handles kubectl
+operations. If a remediation action requires data-plane API calls to
+resources behind a private endpoint — such as a database, storage
+account, or internal service running inside the VNet — ARM cannot reach
+those endpoints. Those operations require the agent itself to have
+private endpoint connectivity, which is not yet supported.</p>
+<p><strong>Other Azure compute services have different access
+models.</strong> This post focuses on AKS, but enterprise teams also
+lock down Azure Container Apps (ACA) and Azure App Service with VNet
+integration, internal-only ingress, and private endpoints. While
+ARM-based management operations (restart, configuration, scaling) work
+similarly, data-plane operations like log streaming, console exec, and
+Kudu access may be blocked when private endpoints are enabled. We plan
+to test and document these scenarios in a follow-up post.</p>
+<p><strong>Private endpoint support is on the roadmap.</strong> Until
+the SRE Agent supports connecting through private endpoints, the
+workarounds described in this post apply only to control-plane
+operations routed through ARM. For fully private environments where all
+resources are behind private endpoints, some agent capabilities will be
+unavailable.</p>
+<hr />
+<h2 id="feedback-and-support">Feedback and support</h2>
+<p>We built these findings while deploying Azure SRE Agent in a real
+enterprise environment with production-grade security constraints. If
+you encounter additional gotchas or have questions about specific AKS
+configurations, reach out through:</p>
+<ul>
+<li><a href="https://aka.ms/sreagent/newdocs">Azure SRE Agent
+documentation</a></li>
+<li><a
+href="https://techcommunity.microsoft.com/category/azure/blog/appsonazureblog">Azure
+SRE Agent community discussions</a></li>
+</ul>
+<hr />
+<h2 id="get-started">Get started</h2>
+<p>Azure SRE Agent is <a href="https://aka.ms/sreagent/ga">generally
+available</a>. If you’re running hardened AKS clusters, the four-role
+setup described here gets your agent productive in minutes.</p>
+<h3 id="resources">Resources</h3>
+<ul>
+<li>SRE Agent documentation: <a
+href="https://aka.ms/sreagent/newdocs">aka.ms/sreagent/newdocs</a></li>
+<li>SRE Agent GA announcement: <a
+href="https://aka.ms/sreagent/ga">aka.ms/sreagent/ga</a></li>
+<li>Deep Context blog by Deepthi Chelupati: <a
+href="https://techcommunity.microsoft.com/blog/appsonazureblog/azure-sre-agent-now-builds-expertise-like-your-best-engineer-introducing-deep-co/4500754">Azure
+SRE Agent Now Builds Expertise Like Your Best Engineer</a></li>
+<li>AKS Azure RBAC docs: <a
+href="https://learn.microsoft.com/en-us/azure/aks/manage-azure-rbac">Use
+Azure RBAC for Kubernetes Authorization</a></li>
+</ul>
+<p>Special thanks to <a
+href="https://techcommunity.microsoft.com/users/dchelupati/3031090">Deepthi
+Chelupati</a> for the SRE Agent guidance.</p>
+
+
+</ul>
+</body>
+</html>

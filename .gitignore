@@ -91,3 +91,13 @@ partner-context/
 meetings-recaps/Customer-Enablement-Automation-Roadmap_-Zafin-3-1.md
 meetings-recaps/
 blog-posts/
+# Whitelist the public AKS SRE Agent blog draft so the SRE Agent can read it on GitHub
+!blog-posts/
+blog-posts/*
+!blog-posts/BLOG-SRE-AGENT-PRIVATE-AKS-DRAFT.md
+!blog-posts/BLOG-SRE-AGENT-PRIVATE-AKS-DRAFT.html
+!blog-posts/BLOG-SRE-AGENT-PRIVATE-AKS-DRAFT.docx
+!blog-posts/postprocess.py
+!blog-posts/convert_to_docx.py
+!blog-posts/pictures/
+!blog-posts/pictures/*
